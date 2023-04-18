@@ -118,7 +118,7 @@ func main() {
 				SetEmailHost(c.String("email_host"))
 				SetEmailPort(c.Int("email_port"))
 				SetEmailAuthCode(c.String("email_auth_code"))
-				err := SendEmail("测试服务")
+				err := SendEmail("测试邮件服务")
 				if err != nil {
 					log.Fatalf("test send email err: %s", err.Error())
 				}

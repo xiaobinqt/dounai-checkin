@@ -95,8 +95,8 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 				close(exit)
 				return
 			}
-			// 每天早上 8 点自动签到
-			if nowTime == "08:00" {
+			// 每天 10 点自动签到
+			if nowTime == "10:00" {
 				msg, err := checkin(cookie)
 				if err != nil {
 					_ = SendEmail(err.Error())
