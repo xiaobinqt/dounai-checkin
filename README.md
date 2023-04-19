@@ -12,8 +12,6 @@
 
 ## 编译运行
 
-可以直接使用
-
 ```shell
 # 编译
 go build -v -o dounai 
