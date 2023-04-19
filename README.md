@@ -35,7 +35,7 @@ go build -v -o dounai
 ./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱) --email_host smtp.163.com --email_port 25 --email_auth_code 123456789X
 ```
 
-![](https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/a83012ad7b5142efa49f8e6e30f1ae0c.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15)
+![](https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/8720861bdf004cd091e6e1a6e8291ff0.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15)
 
 ## 测试邮箱连通性
 
@@ -43,7 +43,7 @@ go build -v -o dounai
  ./dounai test-email --email 豆奶账号(邮箱) --email_host 邮箱服务器地址 --email_port 邮箱服务端口 --email_auth_code 邮箱授权密码 [--email_tls true]
 ```
 
-![](https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/9319cbe4880e4fc398e220736be7b537.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15)
+![](https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/081fd5d62c654133809cdb15e97ae7fc.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15)
 
 ## 阿里云 ECS 25 端口发送邮件失败
 
