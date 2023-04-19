@@ -29,10 +29,22 @@ go build -v -o dounai
 + email_auth_code 邮箱授权密码
 
 ```shell
-./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱) --email_host 邮箱服务器地址 --email_port 邮箱服务端口 --email_auth_code 邮箱授权密码
+./dounai start \
+--url 豆奶网址(https://example.com) \ 
+--password 登录密码 \
+--email 豆奶账号(邮箱)  \
+--email_host 邮箱服务器地址 \
+--email_port 邮箱服务端口 \
+--email_auth_code 邮箱授权密码
 
 # 以 163 邮箱示例
-./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱) --email_host smtp.163.com --email_port 25 --email_auth_code 123456789X
+./dounai start \
+--url 豆奶网址(https://example.com) \
+--password 登录密码 \
+--email 豆奶账号(邮箱) \
+--email_host smtp.163.com \
+--email_port 25 \
+--email_auth_code 123456789X(邮箱授权码)
 ```
 
 ![](https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/8720861bdf004cd091e6e1a6e8291ff0.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15)
@@ -40,7 +52,11 @@ go build -v -o dounai
 ## 测试邮箱连通性
 
 ```shell
- ./dounai test-email --email 豆奶账号(邮箱) --email_host 邮箱服务器地址 --email_port 邮箱服务端口 --email_auth_code 邮箱授权密码 [--email_tls true]
+./dounai test-email \
+--email 豆奶账号(邮箱) \
+--email_host 邮箱服务器地址 \
+--email_port 邮箱服务端口 \
+--email_auth_code 邮箱授权密码 [--email_tls true]
 ```
 
 ![](https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/081fd5d62c654133809cdb15e97ae7fc.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15)
@@ -57,6 +73,12 @@ go build -v -o dounai
 以 163 邮箱服务为例，这里的端口不是 25 非 SSL 端口了，改成了 465 SSL 端口。
 
 ```shell
-./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱) --email_host smtp.163.com --email_port 465 --email_auth_code 123456789X --email_tls true
+./dounai start \
+--url 豆奶网址(https://example.com) \
+--password 登录密码 --email 豆奶账号(邮箱) \
+--email_host smtp.163.com \
+--email_port 465 \
+--email_auth_code 123456789X(邮箱授权码) \
+--email_tls true
 ```
 
