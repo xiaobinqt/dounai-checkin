@@ -54,7 +54,7 @@ func main() {
 				},
 				&cli.BoolFlag{
 					Name:  "email_tls",
-					Usage: "email tls/SSL 协议",
+					Usage: "email tls/是否使用 SSL 协议",
 				},
 				&cli.StringFlag{
 					Name:  "email_auth_code",
@@ -112,7 +112,7 @@ func main() {
 				},
 				&cli.BoolFlag{
 					Name:  "email_tls",
-					Usage: "email tls/SSL 协议",
+					Usage: "email tls/是否使用 SSL 协议",
 				},
 				&cli.IntFlag{
 					Name:  "email_port",
