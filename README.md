@@ -37,6 +37,8 @@ go build -v -o dounai
 ./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱) --email_host smtp.163.com --email_port 25 --email_auth_code 123456789X
 ```
 
+![](https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/a83012ad7b5142efa49f8e6e30f1ae0c.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15)
+
 ## 测试邮箱连通性
 
 ```shell
