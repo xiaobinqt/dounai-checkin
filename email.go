@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"github.com/jordan-wright/email"
 	"github.com/pkg/errors"
@@ -37,8 +38,16 @@ func SendEmail(msg string) (err error) {
 	//设置文件发送的内容
 	e.Text = []byte(msg)
 	//设置服务器相关的配置
-	err = e.Send(fmt.Sprintf("%s:%d", GetConf().EmailHost, GetConf().EmailPort),
-		smtp.PlainAuth("", GetConf().Email, GetConf().EmailAuthCode, GetConf().EmailHost))
+	if GetConf().EmailTLS {
+		err = e.SendWithTLS(fmt.Sprintf("%s:%d", GetConf().EmailHost, GetConf().EmailPort),
+			smtp.PlainAuth("", GetConf().Email, GetConf().EmailAuthCode, GetConf().EmailHost), &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName:         GetConf().EmailHost,
+			})
+	} else {
+		err = e.Send(fmt.Sprintf("%s:%d", GetConf().EmailHost, GetConf().EmailPort),
+			smtp.PlainAuth("", GetConf().Email, GetConf().EmailAuthCode, GetConf().EmailHost))
+	}
 	if err != nil {
 		err = errors.Wrapf(err, "豆豆豆奶自动签到程序发送邮件失败: %s", err.Error())
 		logrus.Error(err.Error())

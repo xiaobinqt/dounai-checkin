@@ -80,6 +80,7 @@ func checkin(cookie Cookie) (msg string, err error) {
 func ContinueLife(exit chan struct{}, cookie Cookie) {
 	var (
 		err error
+		msg string
 	)
 
 	for {
@@ -97,12 +98,14 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 			}
 			// 每天 10 点自动签到
 			if nowTime == "10:00" {
-				msg, err := checkin(cookie)
-				if err != nil {
-					_ = SendEmail(err.Error())
-					continue
-				}
-				_ = SendEmail(msg)
+				msg, err = checkin(cookie)
+				go func(msg string, err error) {
+					if err != nil {
+						_ = SendEmail(err.Error())
+						return
+					}
+					_ = SendEmail(msg)
+				}(msg, err)
 			}
 		}
 	}
@@ -123,6 +126,7 @@ func AutoCheckIn(dounaiURL, eamil, password string) (err error) {
 	SetEmail(eamil)
 	SetPassword(password)
 
+	logrus.Infof("config: %+v", GetConf())
 	// 定时去签到
 	go ContinueLife(exit, cookie)
 

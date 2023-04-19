@@ -8,6 +8,7 @@ type Conf struct {
 	EmailAuthCode string `json:"email_auth_code"` // 邮箱授权码
 	EmailHost     string `json:"email_host"`
 	EmailPort     int    `json:"email_port"` //
+	EmailTLS      bool   `json:"email_tls"`
 }
 
 var conf *Conf
@@ -30,6 +31,10 @@ func SetEmail(email string) {
 
 func SetEmailAuthCode(emailAuthCode string) {
 	conf.EmailAuthCode = emailAuthCode
+}
+
+func SetEmailTLS(emailTLS bool) {
+	conf.EmailTLS = emailTLS
 }
 
 func SetEmailPort(emailPort int) {

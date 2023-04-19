@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/json-iterator/go/extra"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	"log"
 	"os"
@@ -51,6 +52,10 @@ func main() {
 					Name:  "email_port",
 					Usage: "email server port",
 				},
+				&cli.BoolFlag{
+					Name:  "email_tls",
+					Usage: "email tls/SSL 协议",
+				},
 				&cli.StringFlag{
 					Name:  "email_auth_code",
 					Usage: "email auth code/客户端授权码",
@@ -66,6 +71,7 @@ func main() {
 				SetEmailHost(c.String("email_host"))
 				SetEmailPort(c.Int("email_port"))
 				SetEmailAuthCode(c.String("email_auth_code"))
+				SetEmailTLS(c.Bool("email_tls"))
 				err := AutoCheckIn(url, email, password)
 				if err != nil {
 					log.Fatalf("AutoCheckIn err: %s", err.Error())
@@ -104,6 +110,10 @@ func main() {
 					Name:  "email_host",
 					Usage: "email host",
 				},
+				&cli.BoolFlag{
+					Name:  "email_tls",
+					Usage: "email tls/SSL 协议",
+				},
 				&cli.IntFlag{
 					Name:  "email_port",
 					Usage: "email server port",
@@ -118,6 +128,8 @@ func main() {
 				SetEmailHost(c.String("email_host"))
 				SetEmailPort(c.Int("email_port"))
 				SetEmailAuthCode(c.String("email_auth_code"))
+				SetEmailTLS(c.Bool("email_tls"))
+				logrus.Infof("config: %+v", GetConf())
 				err := SendEmail("测试邮件服务")
 				if err != nil {
 					log.Fatalf("test send email err: %s", err.Error())
