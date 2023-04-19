@@ -57,6 +57,6 @@ go build -v -o dounai
 以 163 邮箱服务为例，这里的端口不是 25 非 SSL 端口了，改成了 465 SSL 端口。
 
 ```shell
-./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱) --email_host smtp.163.com --email_port 465 --email_auth_code 123456789X--email_tls true
+./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱) --email_host smtp.163.com --email_port 465 --email_auth_code 123456789X --email_tls true
 ```
 
