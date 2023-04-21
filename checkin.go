@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/Rican7/retry"
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -40,7 +43,7 @@ func checkin(cookie Cookie) (msg string, err error) {
 	newReq.AddCookie(&http.Cookie{Name: "email", Value: cookie.Email})
 	newReq.AddCookie(&http.Cookie{Name: "expire_in", Value: strconv.FormatInt(cookie.ExpireIn, 10)})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	newReq = newReq.WithContext(ctx)
 
@@ -98,7 +101,7 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 			}
 			// 每天 10 点自动签到
 			if nowTime == "10:00" {
-				msg, err = checkin(cookie)
+				msg, err = tryCheckin(cookie)
 				go func(msg string, err error) {
 					if err != nil {
 						_ = SendEmail(err.Error())
@@ -109,6 +112,23 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 			}
 		}
 	}
+}
+
+func tryCheckin(cookie Cookie) (msg string, err error) {
+	action := func(attempt uint) (err error) {
+		msg, err = checkin(cookie)
+		if err != nil {
+			logrus.Errorf("tryCheckin: %s", err.Error())
+		}
+		return err
+	}
+	err = retry.Retry(
+		action,
+		strategy.Limit(3),
+		strategy.Backoff(backoff.Fibonacci(8*time.Second)),
+	)
+
+	return msg, err
 }
 
 func AutoCheckIn(dounaiURL, eamil, password string) (err error) {

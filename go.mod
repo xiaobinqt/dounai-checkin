@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/Rican7/retry v0.3.2-0.20230214204936-7b112df374c6
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
