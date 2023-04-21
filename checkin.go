@@ -96,6 +96,7 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 			if err != nil {
 				err = errors.Wrapf(err, "ContinueLife refreshCookie err")
 				logrus.Error(err.Error())
+				_ = SendEmail(msg)
 				close(exit)
 				return
 			}
