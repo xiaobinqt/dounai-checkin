@@ -69,8 +69,7 @@ go build -v -o dounai
 
 ## 阿里云 ECS 25 端口发送邮件失败
 
-出于安全考虑，阿里云默认封禁 TCP 25
-端口出方向的访问流量。如果需要解封具体可以参考官方文档 [TCP 25端口解封申请](https://help.aliyun.com/document_detail/56130.html)。
+出于安全考虑，阿里云默认封禁 TCP 25 端口出方向的访问流量。如果需要解封具体可以参考官方文档 [TCP 25端口解封申请](https://help.aliyun.com/document_detail/56130.html)。
 
 这里可以使用 SSL 协议端口解决这个问题，在启动服务时加上一个参数
 
@@ -102,7 +101,7 @@ docker run --rm -e URL=https://example.com  \
 -e EMAIL_HOST=smtp.163.com \
 -e EMAIL_PORT=465 \
 -e EMAIL_AUTH_CODE=123456789X(邮箱授权码) \
---email_tls true \
-dounai-checkin:v1
+-e EAMIL_TLS=true \
+xiaobinqt/dounai-checkin:v1
 ```
 
