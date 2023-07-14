@@ -90,11 +90,11 @@ go build -v -o dounai
 
 ## Docker 运行
 
-可以看 dockerhub 说明 [xiaobinqt/checkin](https://hub.docker.com/r/xiaobinqt/checkin)
+可以看 dockerhub 说明 [xiaobinqt/checkin](https://hub.docker.com/r/xiaobinqt/dounai-checkin)
 
 ```shell
 # 构建镜像
-docker build -t checkin:v1 --progress=plain .
+docker build -t dounai-checkin:v1 --progress=plain .
 
 docker run --rm -e URL=https://example.com  \
 -e PASSWORD=登录密码 \
@@ -103,6 +103,6 @@ docker run --rm -e URL=https://example.com  \
 -e EMAIL_PORT=465 \
 -e EMAIL_AUTH_CODE=123456789X(邮箱授权码) \
 --email_tls true \
-checkin:v1
+dounai-checkin:v1
 ```
 
