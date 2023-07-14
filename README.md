@@ -10,6 +10,12 @@
 
 <div align="center"><img src="https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/be92e64b88c4411a863954c1c7c8fae1.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15" width=  /></div>
 
+## 必填参数
+
++ url 豆奶网址(https://example.com)
++ password 登录密码
++ email 豆奶账号(邮箱)
+
 ## 编译运行
 
 ```shell
@@ -80,5 +86,23 @@ go build -v -o dounai
 --email_port 465 \
 --email_auth_code 123456789X(邮箱授权码) \
 --email_tls true
+```
+
+## Docker 运行
+
+可以看 dockerhub 说明 [xiaobinqt/checkin](https://hub.docker.com/r/xiaobinqt/checkin)
+
+```shell
+# 构建镜像
+docker build -t checkin:v1 --progress=plain .
+
+docker run --rm -e URL=https://example.com  \
+-e PASSWORD=登录密码 \
+-e EMAIL=dustbin1234@163.com \
+-e EMAIL_HOST=smtp.163.com \
+-e EMAIL_PORT=465 \
+-e EMAIL_AUTH_CODE=123456789X(邮箱授权码) \
+--email_tls true \
+checkin:v1
 ```
 
