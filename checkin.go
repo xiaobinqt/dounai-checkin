@@ -11,8 +11,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -111,8 +114,50 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 					_ = SendEmail(msg)
 				}(msg, err)
 			}
+
+			// 每天凌晨 2 点刷新 host url
+			if nowTime == "02:10" {
+				dounaiURL, err := refreshDomainURL()
+				if err == nil {
+					SetDouNaiUrl(dounaiURL)
+				}
+				logrus.Errorf("refreshDomainURL func err: %s", err.Error())
+			}
 		}
 	}
+}
+
+func refreshDomainURL() (newURL string, err error) {
+	doubledouURL := "https://doubledou.win/"
+	newResp, err := http.Get(doubledouURL)
+	if err != nil {
+		err = errors.Wrapf(err, "refreshDomainURL err")
+		logrus.Error(err.Error())
+		return "", err
+	}
+
+	defer newResp.Body.Close()
+
+	newBody, err := ioutil.ReadAll(newResp.Body)
+	if err != nil {
+		err = errors.Wrapf(err, "refreshDomainURL readall err")
+		logrus.Error(err.Error())
+		return "", err
+	}
+
+	re := regexp.MustCompile(`<h1>(.*?)</h1>`)
+	htmlStr := string(newBody)
+	match := re.FindStringSubmatch(htmlStr)
+
+	if len(match) >= 2 {
+		h1Content := match[1]
+		h1Content = strings.ReplaceAll(h1Content, "新地址", "")
+		return fmt.Sprintf("https://%s", h1Content), nil
+	}
+
+	err = fmt.Errorf("refreshDomainURL FindStringSubmatch err")
+	logrus.Error(err.Error())
+	return "", err
 }
 
 func tryCheckin(cookie Cookie) (msg string, err error) {

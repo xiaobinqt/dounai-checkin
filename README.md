@@ -95,7 +95,8 @@ go build -v -o dounai
 # 构建镜像
 docker build -t dounai-checkin:v1 --progress=plain .
 
-docker run --rm -e URL=https://example.com  \
+docker run -d --restart=always \ 
+-e URL=https://example.com  \
 -e PASSWORD=登录密码 \
 -e EMAIL=dustbin1234@163.com \
 -e EMAIL_HOST=smtp.163.com \
