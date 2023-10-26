@@ -137,6 +137,19 @@ func main() {
 				return nil
 			},
 		},
+		{
+			Name:  "doubledou",
+			Usage: "get refresh dounai url",
+			Action: func(c *cli.Context) error {
+				u, err := refreshDomainURL()
+				if err != nil {
+					err = fmt.Errorf("refresh dounai url err: %s \n", err.Error())
+					return err
+				}
+				fmt.Println("refresh dounai success: ", u)
+				return nil
+			},
+		},
 	}
 
 	app.HideVersion = true

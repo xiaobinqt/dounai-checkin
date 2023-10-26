@@ -10,6 +10,9 @@ RUN  go env -w GO111MODULE=auto && \
 
 FROM debian:sid-slim
 
+RUN apt update && \
+    apt-get install -y ca-certificates
+
 ENV TZ=Asia/Shanghai
 
 ENV URL=""
