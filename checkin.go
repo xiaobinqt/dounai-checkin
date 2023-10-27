@@ -120,8 +120,10 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 				dounaiURL, err := refreshDomainURL()
 				if err == nil {
 					SetDouNaiUrl(dounaiURL)
+					logrus.Infof("refreshDomainURL success: [%s]", dounaiURL)
+				} else {
+					logrus.Errorf("refreshDomainURL func err: %s", err.Error())
 				}
-				logrus.Errorf("refreshDomainURL func err: %s", err.Error())
 			}
 		}
 	}
