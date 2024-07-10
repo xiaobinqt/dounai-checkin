@@ -117,7 +117,7 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 
 			// 每天凌晨 2 点刷新 host url
 			if nowTime == "02:10" {
-				dounaiURL, err := refreshDomainURL()
+				dounaiURL, err := getDomainURL()
 				if err == nil {
 					SetDouNaiUrl(dounaiURL)
 					logrus.Infof("refreshDomainURL success: [%s]", dounaiURL)
@@ -129,7 +129,7 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 	}
 }
 
-func refreshDomainURL() (newURL string, err error) {
+func getDomainURL() (dounaiURL string, err error) {
 	doubledouURL := "https://doubledou.win/"
 	newResp, err := http.Get(doubledouURL)
 	if err != nil {
@@ -157,7 +157,7 @@ func refreshDomainURL() (newURL string, err error) {
 		return fmt.Sprintf("https://%s", h1Content), nil
 	}
 
-	err = fmt.Errorf("refreshDomainURL FindStringSubmatch err")
+	err = fmt.Errorf("getDomainURL FindStringSubmatch err")
 	logrus.Error(err.Error())
 	return "", err
 }
@@ -179,10 +179,16 @@ func tryCheckin(cookie Cookie) (msg string, err error) {
 	return msg, err
 }
 
-func AutoCheckIn(dounaiURL, eamil, password string) (err error) {
+func AutoCheckIn(eamil, password string) (err error) {
 	var (
 		exit = make(chan struct{})
 	)
+
+	dounaiURL, err := getDomainURL()
+	if err != nil {
+		err = errors.Wrapf(err, "AutoCheckIn getDomainURL err")
+		return err
+	}
 
 	// 先尝试登录
 	cookie, err := Login(dounaiURL, eamil, password)

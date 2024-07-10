@@ -12,7 +12,6 @@
 
 ## 必填参数
 
-+ url 豆奶网址(https://example.com)
 + password 登录密码
 + email 豆奶账号(邮箱)
 
@@ -23,7 +22,7 @@
 go build -v -o dounai 
 
 # 运行
-./dounai start --url 豆奶网址(https://example.com) --password 登录密码 --email 豆奶账号(邮箱)
+./dounai start --password 登录密码 --email 豆奶账号(邮箱)
 ```
 
 ## 签到成功邮件通知
@@ -36,7 +35,6 @@ go build -v -o dounai
 
 ```shell
 ./dounai start \
---url 豆奶网址(https://example.com) \ 
 --password 登录密码 \
 --email 豆奶账号(邮箱)  \
 --email_host 邮箱服务器地址 \
@@ -45,7 +43,6 @@ go build -v -o dounai
 
 # 以 163 邮箱示例
 ./dounai start \
---url 豆奶网址(https://example.com) \
 --password 登录密码 \
 --email 豆奶账号(邮箱) \
 --email_host smtp.163.com \
@@ -79,7 +76,6 @@ go build -v -o dounai
 
 ```shell
 ./dounai start \
---url 豆奶网址(https://example.com) \
 --password 登录密码 --email 豆奶账号(邮箱) \
 --email_host smtp.163.com \
 --email_port 465 \
@@ -96,7 +92,6 @@ go build -v -o dounai
 docker build -t dounai-checkin:v1 --progress=plain .
 
 docker run -d --restart=always \ 
--e URL=https://example.com  \
 -e PASSWORD=登录密码 \
 -e EMAIL=dustbin1234@163.com \
 -e EMAIL_HOST=smtp.163.com \

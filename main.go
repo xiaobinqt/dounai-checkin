@@ -27,14 +27,6 @@ func main() {
 			Name: "start",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  "url",
-					Value: "https://example.com",
-					Usage: "dounai url address",
-					Action: func(ctx *cli.Context, s string) error {
-						return nil
-					},
-				},
-				&cli.StringFlag{
 					Name:    "email",
 					Aliases: []string{"e"},
 					Usage:   "dounai email",
@@ -63,16 +55,15 @@ func main() {
 			},
 			Usage: "start auto checkin",
 			Action: func(c *cli.Context) error {
-				url, email, password := c.String("url"), c.String("email"), c.String("password")
-				if url == "" || email == "" || password == "" {
-					log.Fatalf("params is invalid,url:[%s],email:[%s],password:[%s]",
-						url, email, password)
+				email, password := c.String("email"), c.String("password")
+				if email == "" || password == "" {
+					log.Fatalf("params is invalid,email:[%s],password:[%s]", email, password)
 				}
 				SetEmailHost(c.String("email_host"))
 				SetEmailPort(c.Int("email_port"))
 				SetEmailAuthCode(c.String("email_auth_code"))
 				SetEmailTLS(c.Bool("email_tls"))
-				err := AutoCheckIn(url, email, password)
+				err := AutoCheckIn(email, password)
 				if err != nil {
 					log.Fatalf("AutoCheckIn err: %s", err.Error())
 				}
@@ -81,9 +72,9 @@ func main() {
 		},
 		{
 			Name:  "help",
-			Usage: "dounai/dounai.exe start --url https://example.com --username zs --password 123456",
+			Usage: "dounai/dounai.exe start --username zs --password 123456",
 			Action: func(c *cli.Context) error {
-				fmt.Println("dounai/dounai.exe start -url https://example.com -username zs -password 123456")
+				fmt.Println("dounai/dounai.exe start -username zs -password 123456")
 				return nil
 			},
 		},
@@ -141,7 +132,7 @@ func main() {
 			Name:  "doubledou",
 			Usage: "get refresh dounai url",
 			Action: func(c *cli.Context) error {
-				u, err := refreshDomainURL()
+				u, err := getDomainURL()
 				if err != nil {
 					err = fmt.Errorf("refresh dounai url err: %s \n", err.Error())
 					return err
