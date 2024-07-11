@@ -22,6 +22,6 @@ jobs:
         with:
           push: true
           tags: xiaobinqt/dounai-checkin:v2
-          context: .
+          #context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
