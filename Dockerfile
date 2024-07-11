@@ -15,7 +15,6 @@ RUN apt update && \
 
 ENV TZ=Asia/Shanghai
 
-ENV URL=""
 ENV PASSWORD=""
 ENV EMAIL=""
 ENV EMAIL_HOST=""
