@@ -3,7 +3,6 @@
 #sleep 10h
 
 /usr/bin/dounai start \
-  --url $URL \
   --password $PASSWORD \
   --email $EMAIL \
   --email_host $EMAIL_HOST \
