@@ -8,7 +8,7 @@
 
 ## 总览
 
-<div align="center"><img src="https://cdn.xiaobinqt.cn/xiaobinqt.io/20230419/be92e64b88c4411a863954c1c7c8fae1.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15" width=  /></div>
+<div align="center"><img src="https://cdn.xiaobinqt.cn/xiaobinqt.io/20240711/62c6d141ae2246e0ba06d1a5400b7cb0.png?imageView2/0/q/75|watermark/2/text/eGlhb2JpbnF0/font/dmlqYXlh/fontsize/1000/fill/IzVDNUI1Qg==/dissolve/52/gravity/SouthEast/dx/15/dy/15" width=  /></div>
 
 ## 必填参数
 
@@ -66,7 +66,8 @@ go build -v -o dounai
 
 ## 阿里云 ECS 25 端口发送邮件失败
 
-出于安全考虑，阿里云默认封禁 TCP 25 端口出方向的访问流量。如果需要解封具体可以参考官方文档 [TCP 25端口解封申请](https://help.aliyun.com/document_detail/56130.html)。
+出于安全考虑，阿里云默认封禁 TCP 25
+端口出方向的访问流量。如果需要解封具体可以参考官方文档 [TCP 25端口解封申请](https://help.aliyun.com/document_detail/56130.html)。
 
 这里可以使用 SSL 协议端口解决这个问题，在启动服务时加上一个参数
 
@@ -85,7 +86,7 @@ go build -v -o dounai
 
 ## Docker 运行
 
-可以看 dockerhub 说明 [xiaobinqt/checkin](https://hub.docker.com/r/xiaobinqt/dounai-checkin)
+### 源码构建镜像并运行
 
 ```shell
 # 构建镜像
@@ -101,3 +102,19 @@ docker run -d --restart=always \
 xiaobinqt/dounai-checkin:v1
 ```
 
+### docker hub
+
+可以看 dockerhub 说明 [xiaobinqt/checkin](https://hub.docker.com/r/xiaobinqt/dounai-checkin)
+
+```shell
+docker pull xiaobinqt/dounai-checkin:v2
+
+docker run  -d --restart=always \
+-e PASSWORD=登录密码 \
+-e EMAIL=dustbin1234@163.com \
+-e EMAIL_HOST=smtp.163.com \
+-e EMAIL_PORT=465 \
+-e EMAIL_AUTH_CODE=123456789X(邮箱授权码) \
+-e EAMIL_TLS=true \
+xiaobinqt/dounai-checkin:v2
+```
