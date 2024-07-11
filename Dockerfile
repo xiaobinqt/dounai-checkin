@@ -25,6 +25,7 @@ ENV EMAIL_TLS=false
 COPY --from=build /go/src/checkin/dounai /usr/bin/
 COPY ./start.sh /scripts/
 
+RUN chmod +x /scripts/start.sh
 
 ENTRYPOINT ["/scripts/start.sh"]
 
