@@ -25,7 +25,7 @@ func Login(dounaiURL, email, password string) (cookie Cookie, err error) {
 	)
 
 	defer func() {
-		logrus.Infof("url:%s, cost:%d ms, body:%s", dounaiURL, time.Since(timeBegin).Milliseconds(), body)
+		logrus.Infof("url:%s, cost:%d ms", dounaiURL, time.Since(timeBegin).Milliseconds())
 	}()
 
 	loginURL := fmt.Sprintf("%s/auth/login", dounaiURL)
@@ -48,7 +48,7 @@ func Login(dounaiURL, email, password string) (cookie Cookie, err error) {
 	// 忽略对证书的校验
 	tr := &http.Transport{
 		DisableKeepAlives: true,
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // 目标服务可能使用无法验证的证书
 	}
 
 	newResp, err := (&http.Client{
@@ -60,6 +60,9 @@ func Login(dounaiURL, email, password string) (cookie Cookie, err error) {
 		return Cookie{}, err
 	}
 	defer newResp.Body.Close()
+	if newResp.StatusCode < http.StatusOK || newResp.StatusCode >= http.StatusMultipleChoices {
+		return Cookie{}, fmt.Errorf("login request returned HTTP %s", newResp.Status)
+	}
 
 	// 判断下是否登录成功,
 	newBody, err = io.ReadAll(newResp.Body)
@@ -78,33 +81,25 @@ func Login(dounaiURL, email, password string) (cookie Cookie, err error) {
 	if ret.Ret != SuccessRetCode {
 		err = fmt.Errorf("%s return ret not 1 is %d", loginURL, ret.Ret)
 		logrus.Error(err.Error())
-		return Cookie{}, nil
+		return Cookie{}, err
 	}
 
 	// 循环 cookie
 	for _, c := range newResp.Cookies() {
-		arr := strings.Split(c.String(), ";")
-		if len(arr) < 1 {
-			continue
+		if c.Name == "uid" {
+			cookie.UID = c.Value
 		}
-		first := strings.Split(arr[0], "=")
-		if len(first) < 1 {
-			continue
+		if c.Name == "key" {
+			cookie.Key = c.Value
 		}
-		if first[0] == "uid" {
-			cookie.UID = first[1]
+		if c.Name == "email" {
+			cookie.Email = c.Value
 		}
-		if first[0] == "key" {
-			cookie.Key = first[1]
+		if c.Name == "ip" {
+			cookie.IP = c.Value
 		}
-		if first[0] == "email" {
-			cookie.Email = first[1]
-		}
-		if first[0] == "ip" {
-			cookie.IP = first[1]
-		}
-		if first[0] == "expire_in" {
-			expireIn, err := strconv.ParseInt(first[1], 10, 64)
+		if c.Name == "expire_in" {
+			expireIn, err := strconv.ParseInt(c.Value, 10, 64)
 			if err != nil {
 				err = errors.Wrapf(err, "login get cookie parse expire in err: %s", err.Error())
 				logrus.Error(err.Error())
@@ -112,6 +107,9 @@ func Login(dounaiURL, email, password string) (cookie Cookie, err error) {
 			}
 			cookie.ExpireIn = expireIn
 		}
+	}
+	if cookie.UID == "" || cookie.Key == "" || cookie.ExpireIn == 0 {
+		return Cookie{}, fmt.Errorf("login response is missing required cookies")
 	}
 
 	return cookie, nil

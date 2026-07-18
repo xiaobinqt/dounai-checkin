@@ -41,7 +41,7 @@ func SendEmail(msg string) (err error) {
 	if GetConf().EmailTLS {
 		err = e.SendWithTLS(fmt.Sprintf("%s:%d", GetConf().EmailHost, GetConf().EmailPort),
 			smtp.PlainAuth("", GetConf().Email, GetConf().EmailAuthCode, GetConf().EmailHost), &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: true, //nolint:gosec // 兼容无法验证证书的 SMTP 服务
 				ServerName:         GetConf().EmailHost,
 			})
 	} else {

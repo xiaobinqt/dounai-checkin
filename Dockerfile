@@ -1,4 +1,4 @@
-FROM golang:1.18 as build
+FROM golang:1.18 AS build
 
 COPY . /go/src/checkin
 
@@ -10,8 +10,9 @@ RUN  go env -w GO111MODULE=auto && \
 
 FROM debian:sid-slim
 
-RUN apt update && \
-    apt-get install -y ca-certificates
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends ca-certificates curl && \
+	rm -rf /var/lib/apt/lists/*
 
 ENV TZ=Asia/Shanghai
 
@@ -21,6 +22,8 @@ ENV EMAIL_HOST=""
 ENV EMAIL_PORT=""
 ENV EMAIL_AUTH_CODE=""
 ENV EMAIL_TLS=false
+ENV CHECKIN_TIME=10:00
+ENV DOUNAI_URL=""
 
 COPY --from=build /go/src/checkin/dounai /usr/bin/
 COPY ./start.sh /scripts/
@@ -28,10 +31,6 @@ COPY ./start.sh /scripts/
 RUN chmod +x /scripts/start.sh
 
 ENTRYPOINT ["/scripts/start.sh"]
-
-
-
-
 
 
 

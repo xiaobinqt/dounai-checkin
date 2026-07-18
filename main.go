@@ -7,14 +7,20 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	"log"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
 func main() {
 	extra.RegisterFuzzyDecoders()
 	flag.Parse()
-	time.LoadLocation("Asia/Shanghai")
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		log.Fatalf("load timezone: %v", err)
+	}
+	time.Local = location
 
 	app := cli.NewApp()
 	app.Name = "dounai"
@@ -52,18 +58,37 @@ func main() {
 					Name:  "email_auth_code",
 					Usage: "email auth code/客户端授权码",
 				},
+				&cli.StringFlag{
+					Name:  "checkin_time",
+					Value: "10:00",
+					Usage: "daily check-in time in UTC+8 (HH:MM)",
+				},
+				&cli.StringFlag{
+					Name:  "dounai_url",
+					Usage: "dounai URL, for example https://example.com",
+				},
 			},
 			Usage: "start auto checkin",
 			Action: func(c *cli.Context) error {
 				email, password := c.String("email"), c.String("password")
 				if email == "" || password == "" {
-					log.Fatalf("params is invalid,email:[%s],password:[%s]", email, password)
+					return fmt.Errorf("email and password are required")
 				}
 				SetEmailHost(c.String("email_host"))
 				SetEmailPort(c.Int("email_port"))
 				SetEmailAuthCode(c.String("email_auth_code"))
 				SetEmailTLS(c.Bool("email_tls"))
-				err := AutoCheckIn(email, password)
+				checkInTime := c.String("checkin_time")
+				if _, err := time.Parse("15:04", checkInTime); err != nil {
+					return fmt.Errorf("invalid checkin_time %q, expected HH:MM", checkInTime)
+				}
+				SetCheckInTime(checkInTime)
+				dounaiURL, err := normalizeDouNaiURL(c.String("dounai_url"))
+				if err != nil {
+					return err
+				}
+				SetDouNaiUrl(dounaiURL)
+				err = AutoCheckIn(email, password)
 				if err != nil {
 					log.Fatalf("AutoCheckIn err: %s", err.Error())
 				}
@@ -120,24 +145,11 @@ func main() {
 				SetEmailPort(c.Int("email_port"))
 				SetEmailAuthCode(c.String("email_auth_code"))
 				SetEmailTLS(c.Bool("email_tls"))
-				logrus.Infof("config: %+v", GetConf())
+				logrus.Infof("email config: host=%s port=%d tls=%t", GetConf().EmailHost, GetConf().EmailPort, GetConf().EmailTLS)
 				err := SendEmail("测试邮件服务")
 				if err != nil {
 					log.Fatalf("test send email err: %s", err.Error())
 				}
-				return nil
-			},
-		},
-		{
-			Name:  "doubledou",
-			Usage: "get refresh dounai url",
-			Action: func(c *cli.Context) error {
-				u, err := getDomainURL()
-				if err != nil {
-					err = fmt.Errorf("refresh dounai url err: %s \n", err.Error())
-					return err
-				}
-				fmt.Println("refresh dounai success: ", u)
 				return nil
 			},
 		},
@@ -149,4 +161,13 @@ func main() {
 		log.Fatalf("error: %v", err)
 	}
 
+}
+
+func normalizeDouNaiURL(rawURL string) (string, error) {
+	dounaiURL := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	parsedURL, err := url.ParseRequestURI(dounaiURL)
+	if err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" {
+		return "", fmt.Errorf("invalid dounai_url %q, expected an https URL", rawURL)
+	}
+	return dounaiURL, nil
 }

@@ -11,16 +11,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"io"
-	"io/ioutil"
 	"net/http"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 )
 
 func refreshCookie(cookie Cookie) (Cookie, error) {
-	if cookie.ExpireIn-time.Now().Unix() > 120 { // 2 个小时就要过期了去刷新
+	if cookie.ExpireIn-time.Now().Unix() > 120 { // 2 分钟内过期时刷新
 		return cookie, nil
 	}
 
@@ -53,7 +50,7 @@ func checkin(cookie Cookie) (msg string, err error) {
 	// 忽略对证书的校验
 	tr := &http.Transport{
 		DisableKeepAlives: true,
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // 目标服务可能使用无法验证的证书
 	}
 
 	newResp, err := (&http.Client{
@@ -65,6 +62,9 @@ func checkin(cookie Cookie) (msg string, err error) {
 		return "", err
 	}
 	defer newResp.Body.Close()
+	if newResp.StatusCode < http.StatusOK || newResp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("checkin request returned HTTP %s", newResp.Status)
+	}
 
 	newBody, err := io.ReadAll(newResp.Body)
 	if err != nil {
@@ -79,20 +79,27 @@ func checkin(cookie Cookie) (msg string, err error) {
 		logrus.Error(err.Error())
 		return "", err
 	}
+	if ret.Ret != SuccessRetCode {
+		return ret.Msg, fmt.Errorf("checkin failed: ret=%d, msg=%s", ret.Ret, ret.Msg)
+	}
 
 	return ret.Msg, nil
 }
 
 func ContinueLife(exit chan struct{}, cookie Cookie) {
 	var (
-		err error
-		msg string
+		err             error
+		msg             string
+		lastCheckInDate string
 	)
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
-		case t := <-time.After(1 * time.Minute):
+		case t := <-ticker.C:
 			nowTime := t.Format("15:04")
+			today := t.Format("2006-01-02")
 
 			// 1. 判断 cookie 是否过期或快要过期,如果是则重新登陆
 			cookie, err = refreshCookie(cookie)
@@ -103,8 +110,9 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 				close(exit)
 				return
 			}
-			// 每天 10 点自动签到
-			if nowTime == "10:00" {
+			// 按 UTC+8 的配置时间每天自动签到
+			if nowTime == GetConf().CheckInTime && lastCheckInDate != today {
+				lastCheckInDate = today
 				msg, err = tryCheckin(cookie)
 				go func(msg string, err error) {
 					if err != nil {
@@ -114,52 +122,8 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 					_ = SendEmail(msg)
 				}(msg, err)
 			}
-
-			// 每天凌晨 2 点刷新 host url
-			if nowTime == "02:10" {
-				dounaiURL, err := getDomainURL()
-				if err == nil {
-					SetDouNaiUrl(dounaiURL)
-					logrus.Infof("refreshDomainURL success: [%s]", dounaiURL)
-				} else {
-					logrus.Errorf("refreshDomainURL func err: %s", err.Error())
-				}
-			}
 		}
 	}
-}
-
-func getDomainURL() (dounaiURL string, err error) {
-	doubledouURL := "https://doubledou.win/"
-	newResp, err := http.Get(doubledouURL)
-	if err != nil {
-		err = errors.Wrapf(err, "refreshDomainURL err")
-		logrus.Error(err.Error())
-		return "", err
-	}
-
-	defer newResp.Body.Close()
-
-	newBody, err := ioutil.ReadAll(newResp.Body)
-	if err != nil {
-		err = errors.Wrapf(err, "refreshDomainURL readall err")
-		logrus.Error(err.Error())
-		return "", err
-	}
-
-	re := regexp.MustCompile(`<h1>(.*?)</h1>`)
-	htmlStr := string(newBody)
-	match := re.FindStringSubmatch(htmlStr)
-
-	if len(match) >= 2 {
-		h1Content := match[1]
-		h1Content = strings.ReplaceAll(h1Content, "新地址", "")
-		return fmt.Sprintf("https://%s", h1Content), nil
-	}
-
-	err = fmt.Errorf("getDomainURL FindStringSubmatch err")
-	logrus.Error(err.Error())
-	return "", err
 }
 
 func tryCheckin(cookie Cookie) (msg string, err error) {
@@ -184,10 +148,9 @@ func AutoCheckIn(eamil, password string) (err error) {
 		exit = make(chan struct{})
 	)
 
-	dounaiURL, err := getDomainURL()
-	if err != nil {
-		err = errors.Wrapf(err, "AutoCheckIn getDomainURL err")
-		return err
+	dounaiURL := GetConf().DouNaiURL
+	if dounaiURL == "" {
+		return fmt.Errorf("dounai_url is required")
 	}
 
 	// 先尝试登录
@@ -200,7 +163,7 @@ func AutoCheckIn(eamil, password string) (err error) {
 	SetEmail(eamil)
 	SetPassword(password)
 
-	logrus.Infof("config: %+v", GetConf())
+	logrus.Infof("dounai url: %s, check-in time: %s (UTC+8), email notification enabled: %t", GetConf().DouNaiURL, GetConf().CheckInTime, GetConf().EmailHost != "")
 	// 定时去签到
 	go ContinueLife(exit, cookie)
 

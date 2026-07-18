@@ -2,7 +2,12 @@ package main
 
 import "testing"
 
-func Test_RefreshDomainURL(t *testing.T) {
-	x, e := refreshDomainURL()
-	t.Log(x, e)
+func TestNormalizeDouNaiURL(t *testing.T) {
+	got, err := normalizeDouNaiURL(" https://example.com/ ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://example.com"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
 }
