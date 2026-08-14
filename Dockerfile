@@ -16,7 +16,7 @@ RUN apt-get update && \
 
 ENV TZ=Asia/Shanghai
 
-ENV PASSWORD=""
+ENV DOUNAI_COOKIE=""
 ENV EMAIL=""
 ENV EMAIL_HOST=""
 ENV EMAIL_PORT=""
@@ -24,6 +24,8 @@ ENV EMAIL_AUTH_CODE=""
 ENV EMAIL_TLS=false
 ENV CHECKIN_TIME=10:00
 ENV DOUNAI_URL=""
+ENV BARK_KEY=""
+ENV BARK_SERVER="https://api.day.app"
 
 COPY --from=build /go/src/checkin/dounai /usr/bin/
 COPY ./start.sh /scripts/
@@ -31,8 +33,6 @@ COPY ./start.sh /scripts/
 RUN chmod +x /scripts/start.sh
 
 ENTRYPOINT ["/scripts/start.sh"]
-
-
 
 
 

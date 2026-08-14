@@ -1,222 +1,69 @@
-# 部署到阿里云 CentOS 7
+# 使用固定出口的 self-hosted runner
 
-本文提供两种部署方式：
+如果豆奶 Cookie 校验登录 IP，浏览器获得的 Cookie 可能无法在 GitHub 托管 Runner 上使用。此时可在家中设备或 VPS 安装 GitHub self-hosted runner，让保活和签到从固定网络出口执行。
 
-1. 直接运行 Linux x86_64 静态二进制，并使用 systemd 守护。
-2. 构建 `linux/amd64` Docker 镜像，上传后运行。
+## 1. 准备主机
 
-## 方式一：二进制 + systemd
+主机需要：
 
-### 1. 本地构建
+- 能访问豆奶服务和 GitHub
+- 固定或较稳定的公网出口 IP
+- Go 环境
+- 长期在线
 
-在 macOS ARM 机器上生成 CentOS 7 x86_64 可执行文件：
+不要把 Cookie 写入主机镜像、安装脚本或公开配置文件。
 
-```shell
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -trimpath -ldflags="-s -w" \
-  -o dounai-linux-amd64 .
+## 2. 注册 Runner
 
-file dounai-linux-amd64
-shasum -a 256 dounai-linux-amd64
-```
-
-`file` 的输出应包含 `ELF 64-bit`、`x86-64` 和 `statically linked`。
-
-### 2. 上传并安装
-
-```shell
-scp dounai-linux-amd64 root@服务器IP:/tmp/dounai
-
-ssh root@服务器IP
-install -m 755 /tmp/dounai /usr/local/bin/dounai
-/usr/local/bin/dounai start --help
-```
-
-如果服务器上存在旧版本，可用以下命令确认实际执行路径：
-
-```shell
-type -a dounai
-command -v dounai
-sha256sum "$(command -v dounai)"
-```
-
-### 3. 创建配置
-
-```shell
-vi /etc/dounai.env
-```
-
-写入：
-
-```shell
-DOUNAI_EMAIL=你的邮箱
-DOUNAI_PASSWORD=登录密码
-DOUNAI_URL=https://example.com
-CHECKIN_TIME=10:00
-EMAIL_HOST=smtp.163.com
-EMAIL_PORT=465
-EMAIL_AUTH_CODE=邮箱授权码
-EMAIL_TLS=true
-```
-
-限制配置文件权限：
-
-```shell
-chmod 600 /etc/dounai.env
-```
-
-如果不需要邮件通知，可以从配置文件和后面的 `ExecStart` 中删除所有 `EMAIL_*` 邮件参数。
-
-### 4. 创建 systemd 服务
-
-```shell
-vi /etc/systemd/system/dounai.service
-```
-
-写入：
-
-```ini
-[Unit]
-Description=Dounai Auto Checkin
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-EnvironmentFile=/etc/dounai.env
-ExecStart=/usr/local/bin/dounai start --dounai_url=${DOUNAI_URL} --email=${DOUNAI_EMAIL} --password=${DOUNAI_PASSWORD} --checkin_time=${CHECKIN_TIME} --email_host=${EMAIL_HOST} --email_port=${EMAIL_PORT} --email_auth_code=${EMAIL_AUTH_CODE} --email_tls=${EMAIL_TLS}
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-启动并设置开机自启：
-
-```shell
-systemctl daemon-reload
-systemctl enable --now dounai
-```
-
-查看状态和日志：
-
-```shell
-systemctl status dounai
-journalctl -u dounai -f
-```
-
-修改 `/etc/dounai.env` 后重启服务：
-
-```shell
-systemctl restart dounai
-```
-
-## 方式二：Docker
-
-### 1. 本地构建并打包 x86_64 镜像
-
-```shell
-(docker image rm --force checkin:latest >/dev/null 2>&1 || true) && \
-rm -f ./checkin-latest.tar.gz && \
-docker buildx build \
-  --platform=linux/amd64 \
-  --tag=checkin:latest \
-  --load \
-  . && \
-docker image inspect checkin:latest \
-  --format='{{.Os}}/{{.Architecture}}' && \
-(docker save checkin:latest | gzip > ./checkin-latest.tar.gz)
-```
-
-预期输出：
+在私有 `dounai-checkin-runner` 仓库打开：
 
 ```text
-linux/amd64
+Settings → Actions → Runners → New self-hosted runner
 ```
 
-### 2. 上传
+根据 GitHub 页面为对应操作系统生成的命令完成下载、配置和服务安装。注册令牌是短期敏感凭据，不要提交到仓库。
 
-```shell
-rsync -avP \
-  ./checkin-latest.tar.gz \
-  root@服务器IP:/root/
+官方说明见 [Adding self-hosted runners](https://docs.github.com/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners)。
+
+## 3. 修改工作流
+
+将私有仓库 `.github/workflows/checkin.yml` 中：
+
+```yaml
+runs-on: ubuntu-latest
 ```
 
-### 3. 服务器清理并加载镜像
+改为：
 
-```shell
-(docker container rm --force dounai-checkin >/dev/null 2>&1 || true) && \
-(docker image rm --force checkin:latest >/dev/null 2>&1 || true) && \
-(gunzip -c /root/checkin-latest.tar.gz | docker load) && \
-docker image inspect checkin:latest \
-  --format='{{.Os}}/{{.Architecture}}'
+```yaml
+runs-on: [self-hosted, linux, x64]
 ```
 
-### 4. 启动容器
+标签应与 GitHub Runners 页面显示的标签一致。
 
-`DOUNAI_URL` 是必填项，必须传入完整的 HTTPS URL。程序不会再从其他页面解析域名。
+## 4. 获取并配置 Cookie
 
-CentOS 7 上使用 `--network=host` 让容器共享宿主机网络栈，避免 Docker bridge 的 DNS 或转发异常。本程序不监听入站端口。
+最好让浏览器登录和 self-hosted runner 使用同一公网出口。手动完成验证码登录后，从浏览器 `/user` 请求复制完整 Cookie，保存为私有仓库的 `DOUNAI_COOKIE` Repository Secret。
 
-```shell
-docker run -d \
-  --name=dounai-checkin \
-  --restart=always \
-  --network=host \
-  -e DOUNAI_URL="https://example.com" \
-  -e PASSWORD="登录密码" \
-  -e EMAIL="你的邮箱" \
-  -e CHECKIN_TIME="10:00" \
-  -e EMAIL_HOST="smtp.163.com" \
-  -e EMAIL_PORT="465" \
-  -e EMAIL_AUTH_CODE="邮箱授权码" \
-  -e EMAIL_TLS="true" \
-  checkin:latest
+其他必填 Secrets：
+
+```text
+DOUNAI_URL
+BARK_KEY
 ```
 
-查看容器状态和日志：
+## 5. 验证
 
-```shell
-docker ps --filter=name=dounai-checkin
-docker logs -f dounai-checkin
-```
+在 Actions 页面手动执行：
 
-使用镜像内置的 `curl` 测试容器到豆奶服务的网络连通性：
+1. `keepalive`
+2. `checkin`
 
-```shell
-docker exec -it dounai-checkin sh -c \
-  'curl --insecure --head --connect-timeout 10 --max-time 20 "$DOUNAI_URL"'
-```
-
-返回 HTTP 响应头说明容器已通过宿主机网络完成 DNS 解析并访问外部 HTTPS 服务。如果仍然超时，需要检查宿主机网络、防火墙、阿里云安全组或 DNS。
-
-## 手动测试
-
-测试邮件连通性：
-
-```shell
-/usr/local/bin/dounai test-email \
-  --email="你的邮箱" \
-  --email_host="smtp.163.com" \
-  --email_port="465" \
-  --email_auth_code="邮箱授权码" \
-  --email_tls="true"
-```
-
-手动前台启动：
-
-```shell
-/usr/local/bin/dounai start \
-  --dounai_url="https://example.com" \
-  --email="你的邮箱" \
-  --password="登录密码" \
-  --checkin_time="10:00"
-```
+如果 `keepalive` 仍返回 401/403，重新登录获取 Cookie，并确认浏览器和 Runner 的公网出口 IP 相同。
 
 ## 安全提示
 
-- 示例中只使用占位符，不要把真实密码、邮箱或授权码提交到 Git。
-- 当前程序会忽略登录、签到和 SMTP TLS 连接的证书校验。
-- 程序不再访问域名发现页；域名变更后，需要更新 `DOUNAI_URL` 并重启服务。
-- 如果真实凭据曾出现在文档或 Git 历史中，请立即在对应服务端轮换。
+- self-hosted runner 只用于受信任的私有仓库和工作流。
+- 定期更新操作系统、GitHub Runner 和 Go。
+- 不要在 Runner 日志中输出环境变量。
+- Cookie 失效后只需更新 GitHub Secret，不需要修改源码。

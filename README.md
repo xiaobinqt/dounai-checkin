@@ -1,246 +1,203 @@
 # dounai-checkin
 
-豆豆豆奶每日自动签到工具。推荐使用 GitHub Actions：每天启动一次临时 Runner，完成登录、签到和 Bark 通知后立即退出，不需要 VPS 或常驻容器。
+豆奶 Cookie 签到与登录态保活工具。适用于登录页启用验证码后的场景：用户在浏览器中手动完成一次登录，程序复用登录 Cookie，不识别或绕过验证码。
 
 ## 功能
 
-- GitHub Actions 每天自动签到
-- 支持在 Actions 页面手动签到
-- 签到失败时最多自动重试三次
-- 签到成功、失败均可发送 Bark 通知
-- 保留邮件通知、本地常驻和 Docker 运行方式
+- 每三小时检查并刷新登录态
+- 每天定时签到，也支持手动签到
+- 签到失败时最多重试三次
+- 登录态失效时发送 Bark 提醒；北京时间 00:00–08:59 静默
+- 签到成功或失败时发送 Bark 通知
+- 服务端在当前进程中更新 Cookie 时自动接收新值
+- 支持 GitHub Actions、本地命令和常驻模式
 
-## 前置条件
+## 工作方式
 
-必须是豆豆豆奶/豆奶的用户。为了遵守网站公约，本项目不提供网站地址及使用说明。
-
-## 使用 GitHub Actions（推荐）
-
-推荐使用“公开源码 + 私有 Runner”方式。源码始终从本项目获取，个人账号和 Bark Key 只保存在自己的私有仓库中：
+推荐使用“公开源码 + 私有 Runner”结构：
 
 ```text
 xiaobinqt/dounai-checkin (Public)
               ↓ 每次拉取最新 main
 你的 dounai-checkin-runner (Private)
               ↓
-          test → build → once
+     keepalive（每 3 小时）
+     checkin（每天 10:17）
               ↓
-        豆奶签到 + Bark 通知
+       Cookie 失效时 Bark 提醒
 ```
 
-这种方式不需要 Fork，也不需要在两个仓库之间同步代码。公开源码更新后，下一次 Action 会自动使用最新版本。
+账号 Cookie 和 Bark Key 只保存在私有 Runner 仓库。公开源码更新后，下一次 Action 自动使用新版本，不需要向两个仓库重复推送代码。
+
+## GitHub Actions 配置
 
 ### 1. 创建私有 Runner 仓库
 
-打开 [GitHub 新建仓库页面](https://github.com/new?name=dounai-checkin-runner&visibility=private)，创建一个空仓库：
+打开 [GitHub 新建仓库页面](https://github.com/new?name=dounai-checkin-runner&visibility=private)，创建空的 Private 仓库：
 
 ```text
 Repository name: dounai-checkin-runner
 Visibility: Private
 ```
 
-不要初始化 README、`.gitignore` 或 License。
+### 2. 添加工作流
 
-### 2. 复制工作流模板
-
-本项目提供了可直接使用的 [examples/checkin-runner.yml](examples/checkin-runner.yml)。在新建的私有仓库中选择：
+复制 [examples/checkin-runner.yml](examples/checkin-runner.yml) 到私有仓库：
 
 ```text
-Add file
-→ Create new file
-→ 文件名填写 .github/workflows/checkin.yml
-→ 复制 examples/checkin-runner.yml 的全部内容
-→ Commit changes
+.github/workflows/checkin.yml
 ```
 
-模板默认会从 `xiaobinqt/dounai-checkin` 的 `main` 分支拉取公开源码，不需要额外 GitHub Token。
+模板默认拉取 `xiaobinqt/dounai-checkin` 的 `main` 分支，不需要额外 GitHub Token。
 
-### 3. 配置 Secrets
+### 3. 获取 Cookie
 
-打开刚创建的私有 Runner 仓库：
+1. 在浏览器打开豆奶登录页，手动输入验证码并登录。
+2. 按 `F12` 打开开发者工具，进入 `Network`。
+3. 登录后刷新 `/user` 页面，点击 Network 中的 `/user` 请求。
+4. 在 `Headers → Request Headers` 找到 `Cookie`，复制完整值。
+
+格式类似：
 
 ```text
-Settings
-→ Secrets and variables
-→ Actions
-→ New repository secret
+uid=...; email=...; key=...; ip=...; expire_in=...; PHPSESSID=...
 ```
 
-添加以下 Repository Secrets：
+如果 Network 没有显示，可进入：
+
+```text
+Application → Storage → Cookies → 对应豆奶域名
+```
+
+复制该域名下的全部 Cookie，并用 `; ` 拼接。不要把 Cookie 发到聊天、Issue 或 Action 日志中。
+
+### 4. 配置 Secrets
+
+在私有 Runner 仓库打开：
+
+```text
+Settings → Secrets and variables → Actions → New repository secret
+```
+
+添加：
 
 | Secret | 必填 | 说明 |
 | --- | --- | --- |
-| `DOUNAI_URL` | 是 | 豆奶服务完整地址，例如 `https://example.com` |
-| `DOUNAI_EMAIL` | 是 | 豆奶登录邮箱 |
-| `DOUNAI_PASSWORD` | 是 | 豆奶登录密码 |
-| `BARK_KEY` | 是 | Bark 首页推送地址最后一段的设备 Key |
+| `DOUNAI_URL` | 是 | 豆奶服务完整 HTTPS 地址 |
+| `DOUNAI_COOKIE` | 是 | 浏览器中复制的完整 Cookie 请求头 |
+| `BARK_KEY` | 是 | Bark 推送地址最后一段的设备 Key |
 | `BARK_SERVER` | 否 | Bark 服务地址，默认 `https://api.day.app` |
 
-`BARK_KEY` 示例：如果 Bark App 中显示的地址是：
+不再需要 `DOUNAI_EMAIL` 和 `DOUNAI_PASSWORD`。验证码出现后，Action 不应该尝试使用账号密码重新登录。
+
+### 5. 手动验证
+
+进入私有仓库：
 
 ```text
-https://api.day.app/abcdefg
+Actions → Dounai session → Run workflow
 ```
 
-则只保存：
+先选择 `keepalive`，确认 Cookie 有效；再选择 `checkin` 测试签到。`keepalive` 成功时不会打扰手机，失败时通常会发送 Bark；北京时间 00:00–08:59 只将 Action 标记为失败，不发送 Bark 或邮件。`checkin` 成功和失败都会通知，不受静默时段影响。
 
-```text
-abcdefg
-```
+### 6. 自动运行时间
 
-不要把完整地址或 Key 直接写进工作流文件。
-
-### 4. 手动测试
-
-工作流和 Secrets 配置完成后，进入私有 Runner 仓库：
-
-```text
-Actions
-→ Daily check-in
-→ Run workflow
-```
-
-第一次应先手动运行，不要等到第二天。运行成功时，`Check in` 步骤会显示签到结果，配置了 `BARK_KEY` 时手机也会收到通知。
-
-### 5. 每天自动运行
-
-模板会每天自动触发一次：
+模板包含两个北京时间计划任务：
 
 ```yaml
 schedule:
+  - cron: "23 */3 * * *"
+    timezone: "Asia/Shanghai"
   - cron: "17 10 * * *"
     timezone: "Asia/Shanghai"
 ```
 
-这表示每天北京时间 10:17。要改为每天 08:30：
+- 每天 `00:23、03:23、06:23……` 保活一次。
+- 每天 `10:17` 签到一次。
 
-```yaml
-schedule:
-  - cron: "30 8 * * *"
-    timezone: "Asia/Shanghai"
-```
+GitHub Actions 定时任务可能因平台负载而延迟，建议继续避开整点。工作流必须存在于默认分支。详见 [GitHub schedule 文档](https://docs.github.com/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
 
-建议避开 `xx:00` 整点；GitHub Actions 调度高峰时可能延迟，签到不保证秒级准时。关于时区、默认分支和调度限制可查看 [GitHub schedule 官方文档](https://docs.github.com/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
+## Cookie 保活的限制
 
-如果没有自动触发，请检查：
+`keepalive` 会携带登录 Cookie 请求 `/user`，并检查以下结果：
 
-- `.github/workflows/checkin.yml` 是否已经提交到默认分支
-- 仓库的 Actions 是否启用
-- `Daily check-in` 工作流是否被手动禁用
-- Secrets 名称是否与上表完全一致
+- HTTP 2xx：当前会话有效。
+- HTTP 401、403 或跳回登录页：会话失效，让 Action 失败；北京时间 09:00–23:59 发送 Bark 提醒。
+- 服务端返回新的 `Set-Cookie`：当前进程会使用新 Cookie，但 GitHub Secret 不会被自动改写。
 
-工作流位于私有 Runner 仓库，不受公开仓库连续 60 天无活动时自动停用 scheduled workflow 的规则影响。
+有两个服务端行为无法由本工具保证：
 
-## 工作流安全设计
+1. 如果 Cookie 是固定期限而非滑动过期，定时访问不会无限续期，到期后仍需手动登录并更新 `DOUNAI_COOKIE`。
+2. Cookie 中包含 `ip`。如果服务端校验登录 IP，浏览器登录 IP 与 GitHub 托管 Runner IP 不同会导致会话失效；此时应使用固定网络出口的 [self-hosted runner](local-to-remote.md)。
 
-- 账号、密码和 Bark Key 只通过 GitHub Secrets 注入。
-- 私有 Runner 每次运行时拉取公开源码，不需要复制或同步源码仓库。
-- Secrets 只提供给配置校验和最终签到步骤，checkout、Go 环境安装和构建步骤无法读取这些凭据。
-- 工作流只有 `contents: read` 权限。
-- `concurrency` 防止手动任务与定时任务重复运行。
-- 单次任务最多运行 10 分钟，程序不会像常驻服务一样持续占用 Runner。
-- 每次签到前先运行单元测试，代码异常时不会继续使用凭据请求签到服务。
+## 本地使用
 
-## 本地执行一次
-
-推荐用环境变量，避免凭据出现在命令行历史中：
+构建：
 
 ```shell
 go build -trimpath -ldflags="-s -w" -o dounai .
+```
+
+为避免 Cookie 出现在 shell 历史中，可静默读取：
+
+```shell
+read -rsp "DOUNAI_COOKIE: " DOUNAI_COOKIE_INPUT
+echo
 
 DOUNAI_URL="https://example.com" \
-DOUNAI_EMAIL="你的邮箱" \
-DOUNAI_PASSWORD="登录密码" \
+DOUNAI_COOKIE="$DOUNAI_COOKIE_INPUT" \
 BARK_KEY="你的 Bark Key" \
-./dounai once
+./dounai keepalive
 ```
 
-`checkin` 是 `once` 的别名：
+执行一次签到：
 
 ```shell
-./dounai checkin \
-  --dounai_url="https://example.com" \
-  --email="你的邮箱" \
-  --password="登录密码" \
-  --bark_key="你的 Bark Key"
+DOUNAI_URL="https://example.com" \
+DOUNAI_COOKIE="$DOUNAI_COOKIE_INPUT" \
+BARK_KEY="你的 Bark Key" \
+./dounai checkin
+
+unset DOUNAI_COOKIE_INPUT
 ```
 
-`once` 会登录、最多重试三次签到、发送通知，然后立即退出。签到失败会返回非零退出码，因此 GitHub Actions 会将任务标记为失败。
+`checkin` 是 `once` 的别名。
 
-## 命令参数与环境变量
+### 命令
 
-| 参数 | 环境变量 | `once` 必填 | 默认值 | 说明 |
+| 命令 | 说明 |
+| --- | --- |
+| `keepalive` | 检查登录态；失败时通知 |
+| `once` / `checkin` | 签到一次并退出 |
+| `start` | 常驻运行，每三小时保活并按配置时间签到 |
+| `test-email` | 测试可选的邮件通知 |
+
+### 参数与环境变量
+
+| 参数 | 环境变量 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- | --- |
 | `--dounai_url` | `DOUNAI_URL` | 是 | - | 豆奶服务完整 HTTPS URL |
-| `--email` | `DOUNAI_EMAIL` | 是 | - | 豆奶登录邮箱 |
-| `--password` | `DOUNAI_PASSWORD` | 是 | - | 豆奶登录密码 |
-| `--bark_key` | `BARK_KEY` | 否 | - | Bark 设备 Key |
+| `--cookie` | `DOUNAI_COOKIE` | 是 | - | 完整 Cookie 请求头 |
+| `--bark_key` | `BARK_KEY` | Action 模板必填 | - | Bark 设备 Key |
 | `--bark_server` | `BARK_SERVER` | 否 | `https://api.day.app` | Bark 服务地址 |
-| `--email_host` | `EMAIL_HOST` | 否 | - | SMTP 服务器地址 |
-| `--email_port` | `EMAIL_PORT` | 否 | `0` | SMTP 服务器端口 |
-| `--email_auth_code` | `EMAIL_AUTH_CODE` | 否 | - | 邮箱客户端授权码 |
-| `--email_tls` | `EMAIL_TLS` | 否 | `false` | 是否使用 SMTP TLS/SSL |
 | `--checkin_time` | `CHECKIN_TIME` | 仅 `start` | `10:00` | 常驻模式签到时间，UTC+8 |
 
-命令行参数优先于环境变量。Bark 推送使用官方 JSON POST 接口，格式可参考 [Bark 官方教程](https://github.com/Finb/Bark/blob/master/docs/en-us/tutorial.md)。
-
-## 邮件通知（可选）
-
-GitHub Secrets 还可以配置：
-
-```text
-EMAIL_HOST
-EMAIL_PORT
-EMAIL_AUTH_CODE
-EMAIL_TLS
-```
-
-以 163 邮箱 465 TLS/SSL 端口为例，本地测试：
-
-```shell
-./dounai test-email \
-  --email="你的邮箱" \
-  --email_host="smtp.163.com" \
-  --email_port="465" \
-  --email_auth_code="邮箱授权码" \
-  --email_tls="true"
-```
-
-邮件参数不完整时不会影响签到和 Bark 通知。
-
-## 常驻与 Docker 模式（兼容）
-
-`start` 仍然支持本地服务器常驻运行，它会每 20 秒检查一次时间：
-
-```shell
-./dounai start \
-  --dounai_url="https://example.com" \
-  --email="你的邮箱" \
-  --password="登录密码" \
-  --checkin_time="10:00"
-```
-
-Docker 源码构建：
-
-```shell
-docker build --progress=plain -t dounai-checkin:latest .
-
-docker run -d \
-  --name=dounai-checkin \
-  --restart=always \
-  -e DOUNAI_URL="https://example.com" \
-  -e EMAIL="你的邮箱" \
-  -e PASSWORD="登录密码" \
-  -e CHECKIN_TIME="10:00" \
-  dounai-checkin:latest
-```
-
-服务器二进制、systemd 和 Docker 的旧部署说明见 [local-to-remote.md](local-to-remote.md)。GitHub Actions 模式不需要 Dockerfile，也不需要服务器。
+邮件通知参数 `EMAIL`、`EMAIL_HOST`、`EMAIL_PORT`、`EMAIL_AUTH_CODE` 和 `EMAIL_TLS` 均为可选。
 
 ## 安全说明
 
-- 不要将真实密码、Bark Key 或邮箱授权码提交到 Git 仓库、镜像或日志。
-- 无论仓库是 Public 还是 Private，都应始终使用 GitHub Secrets 保存凭据。
-- 当前豆奶登录、签到和 SMTP TLS 连接会跳过证书校验，用于兼容证书无法验证的服务；这会降低连接安全性。Bark 通知使用正常的 TLS 证书校验。
-- 如果凭据曾出现在文档或 Git 历史中，应立即在对应服务端轮换。
-- 程序不会自动发现豆奶域名；域名变更后需要更新 `DOUNAI_URL`。
+- Cookie 等同于登录凭据，只能保存在 GitHub Secrets 或其他专用密钥存储中。
+- 不要把 Cookie 写入命令行参数、README、工作流源码、构建产物或日志。
+- 私有 Runner 仓库应保持 Private，工作流权限保持 `contents: read`。
+- 程序不会记录 Cookie 内容，错误消息也不会包含 Cookie。
+- HTTP 客户端使用正常 TLS 证书校验，不再跳过 HTTPS 证书验证。
+- Cookie 失效后，在浏览器重新登录并替换 `DOUNAI_COOKIE` 即可。
+
+## 开发验证
+
+```shell
+go test -race ./...
+go vet ./...
+```
+
+测试使用本地模拟服务，不需要真实 Cookie，也不会访问豆奶账号。

@@ -1,13 +1,3 @@
 #!/bin/sh
 
-#sleep 10h
-
-/usr/bin/dounai start \
-  --password="$PASSWORD" \
-  --email="$EMAIL" \
-  --email_host="$EMAIL_HOST" \
-  --email_port="$EMAIL_PORT" \
-	--email_auth_code="$EMAIL_AUTH_CODE" \
-	--email_tls="$EMAIL_TLS" \
-	--checkin_time="$CHECKIN_TIME" \
-	--dounai_url="$DOUNAI_URL"
+exec /usr/bin/dounai start

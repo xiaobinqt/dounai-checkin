@@ -4,7 +4,6 @@ type Conf struct {
 	Debug         bool   `json:"debug"`           // 调试模式
 	DouNaiURL     string `json:"dounai_url"`      // 豆奶网址的 url,比如 https://example.com
 	Email         string `json:"username"`        // 用户名
-	Password      string `json:"password"`        // 登录密码
 	EmailAuthCode string `json:"email_auth_code"` // 邮箱授权码
 	EmailHost     string `json:"email_host"`
 	EmailPort     int    `json:"email_port"` //
@@ -46,10 +45,6 @@ func SetEmailPort(emailPort int) {
 
 func SetEmailHost(emailHost string) {
 	conf.EmailHost = emailHost
-}
-
-func SetPassword(password string) {
-	conf.Password = password
 }
 
 func SetCheckInTime(checkInTime string) {

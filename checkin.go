@@ -2,135 +2,74 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"io"
-	"net/http"
-	"strconv"
-	"time"
 )
 
-func refreshCookie(cookie Cookie) (Cookie, error) {
-	if cookie.ExpireIn-time.Now().Unix() > 120 { // 2 分钟内过期时刷新
-		return cookie, nil
+const keepAliveInterval = 3 * time.Hour
+
+func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
+	resp, changed, err := s.do(ctx, http.MethodPost, "/user/checkin")
+	if err != nil {
+		return "", changed, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", changed, sessionHTTPError(resp)
+	}
+	body, err := readResponseBody(resp)
+	if err != nil {
+		return "", changed, err
+	}
+	if looksLikeLoginPage(body) {
+		return "", changed, expiredSessionError(resp.Status)
 	}
 
-	return Login(GetConf().DouNaiURL, GetConf().Email, GetConf().Password)
+	var result Resp
+	if err := jsoniter.Unmarshal(body, &result); err != nil {
+		return "", changed, fmt.Errorf("decode check-in response: %w", err)
+	}
+	if result.Ret != SuccessRetCode {
+		return result.Msg, changed, fmt.Errorf("check-in failed: ret=%d, msg=%s", result.Ret, result.Msg)
+	}
+	return result.Msg, changed, nil
 }
 
-func checkin(cookie Cookie) (msg string, err error) {
-	var (
-		surl = fmt.Sprintf("%s/user/checkin", GetConf().DouNaiURL)
-		ret  Resp
-	)
-
-	newReq, err := http.NewRequest(http.MethodPost, surl, nil)
+func (s *Session) KeepAlive(ctx context.Context) (bool, error) {
+	resp, changed, err := s.do(ctx, http.MethodGet, "/user")
 	if err != nil {
-		err = errors.Wrapf(err, "checkin NewRequest error:%s", surl)
-		logrus.Error(err.Error())
-		return "", err
+		return changed, err
 	}
+	defer resp.Body.Close()
 
-	newReq.AddCookie(&http.Cookie{Name: "uid", Value: cookie.UID})
-	newReq.AddCookie(&http.Cookie{Name: "ip", Value: cookie.IP})
-	newReq.AddCookie(&http.Cookie{Name: "key", Value: cookie.Key})
-	newReq.AddCookie(&http.Cookie{Name: "email", Value: cookie.Email})
-	newReq.AddCookie(&http.Cookie{Name: "expire_in", Value: strconv.FormatInt(cookie.ExpireIn, 10)})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	newReq = newReq.WithContext(ctx)
-
-	// 忽略对证书的校验
-	tr := &http.Transport{
-		DisableKeepAlives: true,
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // 目标服务可能使用无法验证的证书
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return changed, sessionHTTPError(resp)
 	}
-
-	newResp, err := (&http.Client{
-		Transport: tr,
-	}).Do(newReq)
+	body, err := readResponseBody(resp)
 	if err != nil {
-		err = errors.Wrapf(err, "checkin request error:%s", surl)
-		logrus.Error(err.Error())
-		return "", err
+		return changed, err
 	}
-	defer newResp.Body.Close()
-	if newResp.StatusCode < http.StatusOK || newResp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("checkin request returned HTTP %s", newResp.Status)
+	if looksLikeLoginPage(body) {
+		return changed, expiredSessionError(resp.Status)
 	}
-
-	newBody, err := io.ReadAll(newResp.Body)
-	if err != nil {
-		err = errors.Wrapf(err, "checkin io.ReadAll err")
-		logrus.Error(err.Error())
-		return "", err
-	}
-
-	err = jsoniter.Unmarshal(newBody, &ret)
-	if err != nil {
-		err = errors.Wrapf(err, "checkin Unmarshal ret err")
-		logrus.Error(err.Error())
-		return "", err
-	}
-	if ret.Ret != SuccessRetCode {
-		return ret.Msg, fmt.Errorf("checkin failed: ret=%d, msg=%s", ret.Ret, ret.Msg)
-	}
-
-	return ret.Msg, nil
+	return changed, nil
 }
 
-func ContinueLife(exit chan struct{}, cookie Cookie) {
-	var (
-		err             error
-		msg             string
-		lastCheckInDate string
-	)
-	ticker := time.NewTicker(20 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case t := <-ticker.C:
-			nowTime := t.Format("15:04")
-			today := t.Format("2006-01-02")
-
-			// 1. 判断 cookie 是否过期或快要过期,如果是则重新登陆
-			cookie, err = refreshCookie(cookie)
-			if err != nil {
-				err = errors.Wrapf(err, "ContinueLife refreshCookie err")
-				logrus.Error(err.Error())
-				_ = notifyCheckInResult(false, err.Error())
-				close(exit)
-				return
-			}
-			// 按 UTC+8 的配置时间每天自动签到
-			if nowTime == GetConf().CheckInTime && lastCheckInDate != today {
-				lastCheckInDate = today
-				msg, err = tryCheckin(cookie)
-				go func(msg string, err error) {
-					if err != nil {
-						_ = notifyCheckInResult(false, err.Error())
-						return
-					}
-					_ = notifyCheckInResult(true, msg)
-				}(msg, err)
-			}
-		}
-	}
-}
-
-func tryCheckin(cookie Cookie) (msg string, err error) {
-	action := func(attempt uint) (err error) {
-		msg, err = checkin(cookie)
+func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool, err error) {
+	action := func(attempt uint) error {
+		var attemptChanged bool
+		msg, attemptChanged, err = session.CheckIn(ctx)
+		changed = changed || attemptChanged
 		if err != nil {
-			logrus.Errorf("tryCheckin: %s", err.Error())
+			logrus.Errorf("check-in attempt %d failed: %v", attempt+1, err)
 		}
 		return err
 	}
@@ -139,50 +78,65 @@ func tryCheckin(cookie Cookie) (msg string, err error) {
 		strategy.Limit(3),
 		strategy.Backoff(backoff.Fibonacci(8*time.Second)),
 	)
-
-	return msg, err
+	return msg, changed, err
 }
 
-func authenticate(email, password string) (Cookie, error) {
-	dounaiURL := GetConf().DouNaiURL
-	if dounaiURL == "" {
-		return Cookie{}, fmt.Errorf("dounai_url is required")
-	}
-
-	cookie, err := Login(dounaiURL, email, password)
+func CheckInOnce(ctx context.Context, cookieHeader string) (string, bool, error) {
+	session, err := NewSession(GetConf().DouNaiURL, cookieHeader)
 	if err != nil {
-		return Cookie{}, err
+		return "", false, err
 	}
-
-	SetEmail(email)
-	SetPassword(password)
-	return cookie, nil
+	return tryCheckIn(ctx, session)
 }
 
-// CheckInOnce logs in, checks in with retries, and returns. It is intended for
-// external schedulers such as GitHub Actions and cron.
-func CheckInOnce(email, password string) (string, error) {
-	cookie, err := authenticate(email, password)
+func KeepAliveOnce(ctx context.Context, cookieHeader string) (bool, error) {
+	session, err := NewSession(GetConf().DouNaiURL, cookieHeader)
 	if err != nil {
-		return "", err
+		return false, err
 	}
-	return tryCheckin(cookie)
+	return session.KeepAlive(ctx)
 }
 
-func AutoCheckIn(email, password string) (err error) {
-	var (
-		exit = make(chan struct{})
-	)
-
-	cookie, err := authenticate(email, password)
+func AutoCheckIn(ctx context.Context, cookieHeader string) error {
+	session, err := NewSession(GetConf().DouNaiURL, cookieHeader)
 	if err != nil {
 		return err
 	}
+	if _, err := session.KeepAlive(ctx); err != nil {
+		_ = notifySessionFailure(err.Error())
+		return err
+	}
 
-	logrus.Infof("dounai url: %s, check-in time: %s (UTC+8), email notification enabled: %t", GetConf().DouNaiURL, GetConf().CheckInTime, GetConf().EmailHost != "")
-	// 定时去签到
-	go ContinueLife(exit, cookie)
+	logrus.Infof("dounai url: %s, check-in time: %s (UTC+8), keepalive interval: %s", GetConf().DouNaiURL, GetConf().CheckInTime, keepAliveInterval)
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	lastKeepAlive := time.Now()
+	lastCheckInDate := ""
 
-	<-exit
-	return nil
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case now := <-ticker.C:
+			if now.Sub(lastKeepAlive) >= keepAliveInterval {
+				if _, err := session.KeepAlive(ctx); err != nil {
+					_ = notifySessionFailure(err.Error())
+					return err
+				}
+				lastKeepAlive = now
+			}
+
+			today := now.Format("2006-01-02")
+			if now.Format("15:04") != GetConf().CheckInTime || lastCheckInDate == today {
+				continue
+			}
+			lastCheckInDate = today
+			msg, _, err := tryCheckIn(ctx, session)
+			if err != nil {
+				_ = notifyCheckInResult(false, err.Error())
+				continue
+			}
+			_ = notifyCheckInResult(true, msg)
+		}
+	}
 }

@@ -1,9 +1,21 @@
-name: Daily check-in
+name: Dounai session
 
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation to run
+        required: true
+        default: checkin
+        type: choice
+        options:
+          - checkin
+          - keepalive
   schedule:
-    # 每天 Asia/Shanghai 10:17 执行；避开整点可降低排队概率。
+    # 每三小时验证并刷新登录态。
+    - cron: "23 */3 * * *"
+      timezone: "Asia/Shanghai"
+    # 每天北京时间 10:17 签到。
     - cron: "17 10 * * *"
       timezone: "Asia/Shanghai"
 
@@ -11,11 +23,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: dounai-daily-check-in
+  group: dounai-session
   cancel-in-progress: false
 
 jobs:
-  checkin:
+  run:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -46,12 +58,11 @@ jobs:
       - name: Validate configuration
         env:
           DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
-          DOUNAI_EMAIL: ${{ secrets.DOUNAI_EMAIL }}
-          DOUNAI_PASSWORD: ${{ secrets.DOUNAI_PASSWORD }}
+          DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
           BARK_KEY: ${{ secrets.BARK_KEY }}
         run: |
           missing=()
-          for name in DOUNAI_URL DOUNAI_EMAIL DOUNAI_PASSWORD BARK_KEY; do
+          for name in DOUNAI_URL DOUNAI_COOKIE BARK_KEY; do
             if [[ -z "${!name}" ]]; then
               missing+=("$name")
             fi
@@ -61,12 +72,20 @@ jobs:
             exit 1
           fi
 
-      - name: Check in
+      - name: Keep alive or check in
         env:
           DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
-          DOUNAI_EMAIL: ${{ secrets.DOUNAI_EMAIL }}
-          DOUNAI_PASSWORD: ${{ secrets.DOUNAI_PASSWORD }}
+          DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
           BARK_KEY: ${{ secrets.BARK_KEY }}
           BARK_SERVER: ${{ secrets.BARK_SERVER || 'https://api.day.app' }}
+          MANUAL_OPERATION: ${{ inputs.operation }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
         run: |
-          "$RUNNER_TEMP/dounai" once
+          operation="keepalive"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            operation="$MANUAL_OPERATION"
+          elif [[ "$EVENT_SCHEDULE" == "17 10 * * *" ]]; then
+            operation="checkin"
+          fi
+          "$RUNNER_TEMP/dounai" "$operation"

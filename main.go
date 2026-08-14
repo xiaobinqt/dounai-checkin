@@ -20,16 +20,16 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "dounai"
 	app.Usage = "dounai auto checkin tool"
-	app.Version = "1.0.0"
+	app.Version = "2.0.0"
 
 	app.Commands = []*cli.Command{
 		{
 			Name:    "once",
 			Aliases: []string{"checkin"},
-			Usage:   "check in once and exit (recommended for GitHub Actions)",
-			Flags:   checkInFlags(false),
+			Usage:   "check in once with an existing login session",
+			Flags:   sessionFlags(false),
 			Action: func(c *cli.Context) error {
-				email, password, err := configureCheckIn(c, false)
+				cookieHeader, err := configureSession(c, false)
 				if err != nil {
 					if notifyErr := notifyCheckInResult(false, err.Error()); notifyErr != nil {
 						logrus.Errorf("send configuration failure notification: %v", notifyErr)
@@ -37,27 +37,49 @@ func main() {
 					return err
 				}
 
-				msg, err := CheckInOnce(email, password)
+				msg, changed, err := CheckInOnce(c.Context, cookieHeader)
 				if err != nil {
 					if notifyErr := notifyCheckInResult(false, err.Error()); notifyErr != nil {
 						logrus.Errorf("send failure notification: %v", notifyErr)
 					}
 					return err
 				}
+				warnCookieChanged(changed)
 				logrus.Infof("check-in succeeded: %s", msg)
 				return notifyCheckInResult(true, msg)
 			},
 		},
 		{
-			Name:  "start",
-			Usage: "start the long-running daily scheduler",
-			Flags: checkInFlags(true),
+			Name:  "keepalive",
+			Usage: "verify and refresh an existing login session",
+			Flags: sessionFlags(false),
 			Action: func(c *cli.Context) error {
-				email, password, err := configureCheckIn(c, true)
+				cookieHeader, err := configureSession(c, false)
 				if err != nil {
 					return err
 				}
-				return AutoCheckIn(email, password)
+				changed, err := KeepAliveOnce(c.Context, cookieHeader)
+				if err != nil {
+					if notifyErr := notifySessionFailure(err.Error()); notifyErr != nil {
+						logrus.Errorf("send session failure notification: %v", notifyErr)
+					}
+					return err
+				}
+				warnCookieChanged(changed)
+				logrus.Info("login session is valid")
+				return nil
+			},
+		},
+		{
+			Name:  "start",
+			Usage: "start the long-running keepalive and daily scheduler",
+			Flags: sessionFlags(true),
+			Action: func(c *cli.Context) error {
+				cookieHeader, err := configureSession(c, true)
+				if err != nil {
+					return err
+				}
+				return AutoCheckIn(c.Context, cookieHeader)
 			},
 		},
 		{
@@ -88,19 +110,12 @@ func main() {
 	}
 }
 
-func checkInFlags(withSchedule bool) []cli.Flag {
+func sessionFlags(withSchedule bool) []cli.Flag {
 	flags := []cli.Flag{
 		&cli.StringFlag{
-			Name:    "email",
-			Aliases: []string{"e"},
-			EnvVars: []string{"DOUNAI_EMAIL", "EMAIL"},
-			Usage:   "dounai account email",
-		},
-		&cli.StringFlag{
-			Name:    "password",
-			Aliases: []string{"p"},
-			EnvVars: []string{"DOUNAI_PASSWORD", "PASSWORD"},
-			Usage:   "dounai account password",
+			Name:    "cookie",
+			EnvVars: []string{"DOUNAI_COOKIE"},
+			Usage:   "Cookie header copied from a logged-in browser session",
 		},
 		&cli.StringFlag{
 			Name:    "dounai_url",
@@ -108,7 +123,7 @@ func checkInFlags(withSchedule bool) []cli.Flag {
 			Usage:   "dounai URL, for example https://example.com",
 		},
 	}
-	flags = append(flags, emailFlags()[1:]...)
+	flags = append(flags, emailFlags()...)
 	flags = append(flags,
 		&cli.StringFlag{
 			Name:    "bark_key",
@@ -138,7 +153,7 @@ func emailFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:    "email",
 			Aliases: []string{"e"},
-			EnvVars: []string{"DOUNAI_EMAIL", "EMAIL"},
+			EnvVars: []string{"EMAIL"},
 			Usage:   "sender and recipient email",
 		},
 		&cli.StringFlag{
@@ -164,32 +179,36 @@ func emailFlags() []cli.Flag {
 	}
 }
 
-func configureCheckIn(c *cli.Context, withSchedule bool) (string, string, error) {
-	email := strings.TrimSpace(c.String("email"))
-	password := c.String("password")
+func configureSession(c *cli.Context, withSchedule bool) (string, error) {
+	cookieHeader := strings.TrimSpace(c.String("cookie"))
 	configureEmail(c)
 	SetBarkKey(strings.TrimSpace(c.String("bark_key")))
 	SetBarkServer(strings.TrimRight(strings.TrimSpace(c.String("bark_server")), "/"))
 
-	if email == "" || password == "" {
-		return "", "", fmt.Errorf("email and password are required")
+	if cookieHeader == "" {
+		return "", fmt.Errorf("dounai_cookie is required")
 	}
-
 	dounaiURL, err := normalizeDouNaiURL(c.String("dounai_url"))
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	SetDouNaiUrl(dounaiURL)
 
 	if withSchedule {
 		checkInTime := c.String("checkin_time")
 		if _, err := time.Parse("15:04", checkInTime); err != nil {
-			return "", "", fmt.Errorf("invalid checkin_time %q, expected HH:MM", checkInTime)
+			return "", fmt.Errorf("invalid checkin_time %q, expected HH:MM", checkInTime)
 		}
 		SetCheckInTime(checkInTime)
 	}
 
-	return email, password, nil
+	return cookieHeader, nil
+}
+
+func warnCookieChanged(changed bool) {
+	if changed {
+		logrus.Warn("server returned updated session cookies; they are active only for this process, so DOUNAI_COOKIE may need to be replaced when the stored session expires")
+	}
 }
 
 func configureEmail(c *cli.Context) {

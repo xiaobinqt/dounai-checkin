@@ -17,3 +17,5 @@
 .idea
 *.gz
 /dounai-linux-*
+/dounai
+/dounai-checkin
