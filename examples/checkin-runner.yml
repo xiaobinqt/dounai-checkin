@@ -1,0 +1,72 @@
+name: Daily check-in
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 每天 Asia/Shanghai 10:17 执行；避开整点可降低排队概率。
+    - cron: "17 10 * * *"
+      timezone: "Asia/Shanghai"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dounai-daily-check-in
+  cancel-in-progress: false
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout public source
+        uses: actions/checkout@v7
+        with:
+          repository: xiaobinqt/dounai-checkin
+          ref: main
+          path: source
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: source/go.mod
+          cache: true
+          cache-dependency-path: source/go.sum
+
+      - name: Test
+        working-directory: source
+        run: go test ./...
+
+      - name: Build
+        working-directory: source
+        run: go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/dounai" .
+
+      - name: Validate configuration
+        env:
+          DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
+          DOUNAI_EMAIL: ${{ secrets.DOUNAI_EMAIL }}
+          DOUNAI_PASSWORD: ${{ secrets.DOUNAI_PASSWORD }}
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+        run: |
+          missing=()
+          for name in DOUNAI_URL DOUNAI_EMAIL DOUNAI_PASSWORD BARK_KEY; do
+            if [[ -z "${!name}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf '::error::Missing required repository secrets: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Check in
+        env:
+          DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
+          DOUNAI_EMAIL: ${{ secrets.DOUNAI_EMAIL }}
+          DOUNAI_PASSWORD: ${{ secrets.DOUNAI_PASSWORD }}
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+          BARK_SERVER: ${{ secrets.BARK_SERVER || 'https://api.day.app' }}
+        run: |
+          "$RUNNER_TEMP/dounai" once

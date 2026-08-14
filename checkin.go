@@ -106,7 +106,7 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 			if err != nil {
 				err = errors.Wrapf(err, "ContinueLife refreshCookie err")
 				logrus.Error(err.Error())
-				_ = SendEmail(msg)
+				_ = notifyCheckInResult(false, err.Error())
 				close(exit)
 				return
 			}
@@ -116,10 +116,10 @@ func ContinueLife(exit chan struct{}, cookie Cookie) {
 				msg, err = tryCheckin(cookie)
 				go func(msg string, err error) {
 					if err != nil {
-						_ = SendEmail(err.Error())
+						_ = notifyCheckInResult(false, err.Error())
 						return
 					}
-					_ = SendEmail(msg)
+					_ = notifyCheckInResult(true, msg)
 				}(msg, err)
 			}
 		}
@@ -143,25 +143,41 @@ func tryCheckin(cookie Cookie) (msg string, err error) {
 	return msg, err
 }
 
-func AutoCheckIn(eamil, password string) (err error) {
+func authenticate(email, password string) (Cookie, error) {
+	dounaiURL := GetConf().DouNaiURL
+	if dounaiURL == "" {
+		return Cookie{}, fmt.Errorf("dounai_url is required")
+	}
+
+	cookie, err := Login(dounaiURL, email, password)
+	if err != nil {
+		return Cookie{}, err
+	}
+
+	SetEmail(email)
+	SetPassword(password)
+	return cookie, nil
+}
+
+// CheckInOnce logs in, checks in with retries, and returns. It is intended for
+// external schedulers such as GitHub Actions and cron.
+func CheckInOnce(email, password string) (string, error) {
+	cookie, err := authenticate(email, password)
+	if err != nil {
+		return "", err
+	}
+	return tryCheckin(cookie)
+}
+
+func AutoCheckIn(email, password string) (err error) {
 	var (
 		exit = make(chan struct{})
 	)
 
-	dounaiURL := GetConf().DouNaiURL
-	if dounaiURL == "" {
-		return fmt.Errorf("dounai_url is required")
-	}
-
-	// 先尝试登录
-	cookie, err := Login(dounaiURL, eamil, password)
+	cookie, err := authenticate(email, password)
 	if err != nil {
 		return err
 	}
-
-	SetDouNaiUrl(dounaiURL)
-	SetEmail(eamil)
-	SetPassword(password)
 
 	logrus.Infof("dounai url: %s, check-in time: %s (UTC+8), email notification enabled: %t", GetConf().DouNaiURL, GetConf().CheckInTime, GetConf().EmailHost != "")
 	// 定时去签到

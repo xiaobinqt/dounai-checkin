@@ -1,106 +1,63 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"github.com/json-iterator/go/extra"
-	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli/v2"
 	"log"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/json-iterator/go/extra"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
 	extra.RegisterFuzzyDecoders()
-	flag.Parse()
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		log.Fatalf("load timezone: %v", err)
-	}
-	time.Local = location
+	time.Local = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 	app := cli.NewApp()
 	app.Name = "dounai"
 	app.Usage = "dounai auto checkin tool"
 	app.Version = "1.0.0"
 
-	// 多个命令，可以指定到 Commands 中
 	app.Commands = []*cli.Command{
 		{
-			Name: "start",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "email",
-					Aliases: []string{"e"},
-					Usage:   "dounai email",
-				},
-				&cli.StringFlag{
-					Name:    "password",
-					Aliases: []string{"p"},
-					Usage:   "dounai password",
-				},
-				&cli.StringFlag{
-					Name:  "email_host",
-					Usage: "email host",
-				},
-				&cli.IntFlag{
-					Name:  "email_port",
-					Usage: "email server port",
-				},
-				&cli.BoolFlag{
-					Name:  "email_tls",
-					Usage: "email tls/是否使用 SSL 协议",
-				},
-				&cli.StringFlag{
-					Name:  "email_auth_code",
-					Usage: "email auth code/客户端授权码",
-				},
-				&cli.StringFlag{
-					Name:  "checkin_time",
-					Value: "10:00",
-					Usage: "daily check-in time in UTC+8 (HH:MM)",
-				},
-				&cli.StringFlag{
-					Name:  "dounai_url",
-					Usage: "dounai URL, for example https://example.com",
-				},
-			},
-			Usage: "start auto checkin",
+			Name:    "once",
+			Aliases: []string{"checkin"},
+			Usage:   "check in once and exit (recommended for GitHub Actions)",
+			Flags:   checkInFlags(false),
 			Action: func(c *cli.Context) error {
-				email, password := c.String("email"), c.String("password")
-				if email == "" || password == "" {
-					return fmt.Errorf("email and password are required")
-				}
-				SetEmailHost(c.String("email_host"))
-				SetEmailPort(c.Int("email_port"))
-				SetEmailAuthCode(c.String("email_auth_code"))
-				SetEmailTLS(c.Bool("email_tls"))
-				checkInTime := c.String("checkin_time")
-				if _, err := time.Parse("15:04", checkInTime); err != nil {
-					return fmt.Errorf("invalid checkin_time %q, expected HH:MM", checkInTime)
-				}
-				SetCheckInTime(checkInTime)
-				dounaiURL, err := normalizeDouNaiURL(c.String("dounai_url"))
+				email, password, err := configureCheckIn(c, false)
 				if err != nil {
+					if notifyErr := notifyCheckInResult(false, err.Error()); notifyErr != nil {
+						logrus.Errorf("send configuration failure notification: %v", notifyErr)
+					}
 					return err
 				}
-				SetDouNaiUrl(dounaiURL)
-				err = AutoCheckIn(email, password)
+
+				msg, err := CheckInOnce(email, password)
 				if err != nil {
-					log.Fatalf("AutoCheckIn err: %s", err.Error())
+					if notifyErr := notifyCheckInResult(false, err.Error()); notifyErr != nil {
+						logrus.Errorf("send failure notification: %v", notifyErr)
+					}
+					return err
 				}
-				return nil
+				logrus.Infof("check-in succeeded: %s", msg)
+				return notifyCheckInResult(true, msg)
 			},
 		},
 		{
-			Name:  "help",
-			Usage: "dounai/dounai.exe start --username zs --password 123456",
+			Name:  "start",
+			Usage: "start the long-running daily scheduler",
+			Flags: checkInFlags(true),
 			Action: func(c *cli.Context) error {
-				fmt.Println("dounai/dounai.exe start -username zs -password 123456")
-				return nil
+				email, password, err := configureCheckIn(c, true)
+				if err != nil {
+					return err
+				}
+				return AutoCheckIn(email, password)
 			},
 		},
 		{
@@ -116,51 +73,131 @@ func main() {
 			Name:    "test-email",
 			Aliases: []string{"te"},
 			Usage:   "测试邮件",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "email",
-					Aliases: []string{"e"},
-					Usage:   "dounai email",
-				},
-				&cli.StringFlag{
-					Name:  "email_host",
-					Usage: "email host",
-				},
-				&cli.BoolFlag{
-					Name:  "email_tls",
-					Usage: "email tls/是否使用 SSL 协议",
-				},
-				&cli.IntFlag{
-					Name:  "email_port",
-					Usage: "email server port",
-				},
-				&cli.StringFlag{
-					Name:  "email_auth_code",
-					Usage: "email auth code/客户端授权码",
-				},
-			},
+			Flags:   emailFlags(),
 			Action: func(c *cli.Context) error {
-				SetEmail(c.String("email"))
-				SetEmailHost(c.String("email_host"))
-				SetEmailPort(c.Int("email_port"))
-				SetEmailAuthCode(c.String("email_auth_code"))
-				SetEmailTLS(c.Bool("email_tls"))
+				configureEmail(c)
 				logrus.Infof("email config: host=%s port=%d tls=%t", GetConf().EmailHost, GetConf().EmailPort, GetConf().EmailTLS)
-				err := SendEmail("测试邮件服务")
-				if err != nil {
-					log.Fatalf("test send email err: %s", err.Error())
-				}
-				return nil
+				return SendEmail("测试邮件服务")
 			},
 		},
 	}
 
 	app.HideVersion = true
-	//app.CustomAppHelpTemplate = "dounai -url https://example.com -username zs -password 123456"
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("error: %v", err)
 	}
+}
 
+func checkInFlags(withSchedule bool) []cli.Flag {
+	flags := []cli.Flag{
+		&cli.StringFlag{
+			Name:    "email",
+			Aliases: []string{"e"},
+			EnvVars: []string{"DOUNAI_EMAIL", "EMAIL"},
+			Usage:   "dounai account email",
+		},
+		&cli.StringFlag{
+			Name:    "password",
+			Aliases: []string{"p"},
+			EnvVars: []string{"DOUNAI_PASSWORD", "PASSWORD"},
+			Usage:   "dounai account password",
+		},
+		&cli.StringFlag{
+			Name:    "dounai_url",
+			EnvVars: []string{"DOUNAI_URL"},
+			Usage:   "dounai URL, for example https://example.com",
+		},
+	}
+	flags = append(flags, emailFlags()[1:]...)
+	flags = append(flags,
+		&cli.StringFlag{
+			Name:    "bark_key",
+			EnvVars: []string{"BARK_KEY"},
+			Usage:   "Bark device key",
+		},
+		&cli.StringFlag{
+			Name:    "bark_server",
+			EnvVars: []string{"BARK_SERVER"},
+			Value:   defaultBarkServer,
+			Usage:   "Bark server URL",
+		},
+	)
+	if withSchedule {
+		flags = append(flags, &cli.StringFlag{
+			Name:    "checkin_time",
+			EnvVars: []string{"CHECKIN_TIME"},
+			Value:   "10:00",
+			Usage:   "daily check-in time in UTC+8 (HH:MM)",
+		})
+	}
+	return flags
+}
+
+func emailFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "email",
+			Aliases: []string{"e"},
+			EnvVars: []string{"DOUNAI_EMAIL", "EMAIL"},
+			Usage:   "sender and recipient email",
+		},
+		&cli.StringFlag{
+			Name:    "email_host",
+			EnvVars: []string{"EMAIL_HOST"},
+			Usage:   "SMTP server host",
+		},
+		&cli.IntFlag{
+			Name:    "email_port",
+			EnvVars: []string{"EMAIL_PORT"},
+			Usage:   "SMTP server port",
+		},
+		&cli.BoolFlag{
+			Name:    "email_tls",
+			EnvVars: []string{"EMAIL_TLS"},
+			Usage:   "use SMTP TLS/SSL",
+		},
+		&cli.StringFlag{
+			Name:    "email_auth_code",
+			EnvVars: []string{"EMAIL_AUTH_CODE"},
+			Usage:   "SMTP client authorization code",
+		},
+	}
+}
+
+func configureCheckIn(c *cli.Context, withSchedule bool) (string, string, error) {
+	email := strings.TrimSpace(c.String("email"))
+	password := c.String("password")
+	configureEmail(c)
+	SetBarkKey(strings.TrimSpace(c.String("bark_key")))
+	SetBarkServer(strings.TrimRight(strings.TrimSpace(c.String("bark_server")), "/"))
+
+	if email == "" || password == "" {
+		return "", "", fmt.Errorf("email and password are required")
+	}
+
+	dounaiURL, err := normalizeDouNaiURL(c.String("dounai_url"))
+	if err != nil {
+		return "", "", err
+	}
+	SetDouNaiUrl(dounaiURL)
+
+	if withSchedule {
+		checkInTime := c.String("checkin_time")
+		if _, err := time.Parse("15:04", checkInTime); err != nil {
+			return "", "", fmt.Errorf("invalid checkin_time %q, expected HH:MM", checkInTime)
+		}
+		SetCheckInTime(checkInTime)
+	}
+
+	return email, password, nil
+}
+
+func configureEmail(c *cli.Context) {
+	SetEmail(strings.TrimSpace(c.String("email")))
+	SetEmailHost(c.String("email_host"))
+	SetEmailPort(c.Int("email_port"))
+	SetEmailAuthCode(c.String("email_auth_code"))
+	SetEmailTLS(c.Bool("email_tls"))
 }
 
 func normalizeDouNaiURL(rawURL string) (string, error) {

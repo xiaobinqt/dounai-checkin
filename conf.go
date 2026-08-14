@@ -10,6 +10,8 @@ type Conf struct {
 	EmailPort     int    `json:"email_port"` //
 	EmailTLS      bool   `json:"email_tls"`
 	CheckInTime   string `json:"checkin_time"`
+	BarkKey       string `json:"bark_key"`
+	BarkServer    string `json:"bark_server"`
 }
 
 var conf *Conf
@@ -52,6 +54,14 @@ func SetPassword(password string) {
 
 func SetCheckInTime(checkInTime string) {
 	conf.CheckInTime = checkInTime
+}
+
+func SetBarkKey(barkKey string) {
+	conf.BarkKey = barkKey
+}
+
+func SetBarkServer(barkServer string) {
+	conf.BarkServer = barkServer
 }
 
 func GetConf() *Conf {
