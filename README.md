@@ -91,9 +91,16 @@ Settings → Secrets and variables → Actions → New repository secret
 | `EMAIL_HOST` | 否 | SMTP 服务器地址；启用邮件通知时必填 |
 | `EMAIL_PORT` | 否 | SMTP 端口；启用邮件通知时必填 |
 | `EMAIL_AUTH_CODE` | 否 | SMTP 授权码或密码；启用邮件通知时必填 |
-| `EMAIL_TLS` | 否 | 是否使用 SMTP TLS/SSL，默认 `false` |
+| `EMAIL_TLS` | 否 | 是否使用 SMTP TLS/SSL，默认 `false`；使用 `465` 端口时必须设为 `true` |
 
 邮件通知整组可选；完全不配置时程序会静默跳过。配置邮件通知时，`EMAIL`、`EMAIL_HOST`、`EMAIL_PORT` 和 `EMAIL_AUTH_CODE` 必须同时提供。
+
+`EMAIL_TLS` 本身不是必填项，具体取值取决于 SMTP 端口：
+
+- 使用 SMTP `465` 端口：必须设置 `EMAIL_TLS=true`。
+- 使用 SMTP `587` 或 `25` 端口：通常不设置，或设置 `EMAIL_TLS=false`。
+
+多数邮箱服务要求填写 SMTP 授权码或应用专用密码，而不是网页登录密码。可选通知发送失败会记录错误，但不会把已经成功的签到改判为失败。
 
 不再需要豆奶登录用的 `DOUNAI_EMAIL` 和 `DOUNAI_PASSWORD`。上面的 `EMAIL` 和 `EMAIL_AUTH_CODE` 只用于可选的 SMTP 通知，Action 不会使用它们登录豆奶。
 

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jordan-wright/email"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -41,19 +40,19 @@ func SendEmail(msg string) (err error) {
 	//设置文件发送的内容
 	e.Text = []byte(msg)
 	//设置服务器相关的配置
+	serverAddress := fmt.Sprintf("%s:%d", GetConf().EmailHost, GetConf().EmailPort)
 	if GetConf().EmailTLS {
-		err = e.SendWithTLS(fmt.Sprintf("%s:%d", GetConf().EmailHost, GetConf().EmailPort),
+		err = e.SendWithTLS(serverAddress,
 			smtp.PlainAuth("", GetConf().Email, GetConf().EmailAuthCode, GetConf().EmailHost), &tls.Config{
 				InsecureSkipVerify: true, //nolint:gosec // 兼容无法验证证书的 SMTP 服务
 				ServerName:         GetConf().EmailHost,
 			})
 	} else {
-		err = e.Send(fmt.Sprintf("%s:%d", GetConf().EmailHost, GetConf().EmailPort),
+		err = e.Send(serverAddress,
 			smtp.PlainAuth("", GetConf().Email, GetConf().EmailAuthCode, GetConf().EmailHost))
 	}
 	if err != nil {
-		err = errors.Wrapf(err, "豆豆豆奶自动签到程序发送邮件失败: %s", err.Error())
-		return err
+		return fmt.Errorf("send email via %s (tls=%t): %w", serverAddress, GetConf().EmailTLS, err)
 	}
 
 	return nil

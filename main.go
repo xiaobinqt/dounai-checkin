@@ -46,7 +46,10 @@ func main() {
 				}
 				warnCookieChanged(changed)
 				logrus.Infof("check-in succeeded: %s", msg)
-				return notifyCheckInResult(true, msg)
+				if notifyErr := notifyCheckInResult(true, msg); notifyErr != nil {
+					logrus.Errorf("check-in succeeded but notification failed: %v", notifyErr)
+				}
+				return nil
 			},
 		},
 		{
