@@ -87,8 +87,15 @@ Settings → Secrets and variables → Actions → New repository secret
 | `DOUNAI_COOKIE` | 是 | 浏览器中复制的完整 Cookie 请求头 |
 | `BARK_KEY` | 是 | Bark 推送地址最后一段的设备 Key |
 | `BARK_SERVER` | 否 | Bark 服务地址，默认 `https://api.day.app` |
+| `EMAIL` | 否 | 邮件通知的发件人和收件人邮箱 |
+| `EMAIL_HOST` | 否 | SMTP 服务器地址；启用邮件通知时必填 |
+| `EMAIL_PORT` | 否 | SMTP 端口；启用邮件通知时必填 |
+| `EMAIL_AUTH_CODE` | 否 | SMTP 授权码或密码；启用邮件通知时必填 |
+| `EMAIL_TLS` | 否 | 是否使用 SMTP TLS/SSL，默认 `false` |
 
-不再需要 `DOUNAI_EMAIL` 和 `DOUNAI_PASSWORD`。验证码出现后，Action 不应该尝试使用账号密码重新登录。
+邮件通知整组可选；完全不配置时程序会静默跳过。配置邮件通知时，`EMAIL`、`EMAIL_HOST`、`EMAIL_PORT` 和 `EMAIL_AUTH_CODE` 必须同时提供。
+
+不再需要豆奶登录用的 `DOUNAI_EMAIL` 和 `DOUNAI_PASSWORD`。上面的 `EMAIL` 和 `EMAIL_AUTH_CODE` 只用于可选的 SMTP 通知，Action 不会使用它们登录豆奶。
 
 ### 5. 手动验证
 

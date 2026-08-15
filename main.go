@@ -98,6 +98,9 @@ func main() {
 			Flags:   emailFlags(),
 			Action: func(c *cli.Context) error {
 				configureEmail(c)
+				if !emailNotificationConfigured() {
+					return fmt.Errorf("email notification is not configured")
+				}
 				logrus.Infof("email config: host=%s port=%d tls=%t", GetConf().EmailHost, GetConf().EmailPort, GetConf().EmailTLS)
 				return SendEmail("测试邮件服务")
 			},

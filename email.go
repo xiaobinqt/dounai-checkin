@@ -3,10 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"net/smtp"
+	"strings"
+
 	"github.com/jordan-wright/email"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"net/smtp"
 )
 
 var (
@@ -23,9 +24,11 @@ func getEmail() *email.Email {
 
 // 自己发信给自己
 func SendEmail(msg string) (err error) {
-	if GetConf().EmailHost == "" || GetConf().EmailPort == 0 || GetConf().EmailAuthCode == "" {
-		logrus.Warnf("邮件配置为空，暂不会通过邮件通知。")
+	if !emailNotificationConfigured() {
 		return nil
+	}
+	if err := validateEmailNotificationConfig(); err != nil {
+		return err
 	}
 
 	e := getEmail()
@@ -50,9 +53,38 @@ func SendEmail(msg string) (err error) {
 	}
 	if err != nil {
 		err = errors.Wrapf(err, "豆豆豆奶自动签到程序发送邮件失败: %s", err.Error())
-		logrus.Error(err.Error())
 		return err
 	}
 
+	return nil
+}
+
+func emailNotificationConfigured() bool {
+	conf := GetConf()
+	return strings.TrimSpace(conf.Email) != "" ||
+		strings.TrimSpace(conf.EmailHost) != "" ||
+		conf.EmailPort != 0 ||
+		strings.TrimSpace(conf.EmailAuthCode) != "" ||
+		conf.EmailTLS
+}
+
+func validateEmailNotificationConfig() error {
+	conf := GetConf()
+	var missing []string
+	if strings.TrimSpace(conf.Email) == "" {
+		missing = append(missing, "EMAIL")
+	}
+	if strings.TrimSpace(conf.EmailHost) == "" {
+		missing = append(missing, "EMAIL_HOST")
+	}
+	if conf.EmailPort == 0 {
+		missing = append(missing, "EMAIL_PORT")
+	}
+	if strings.TrimSpace(conf.EmailAuthCode) == "" {
+		missing = append(missing, "EMAIL_AUTH_CODE")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("incomplete email notification config: missing %s", strings.Join(missing, ", "))
+	}
 	return nil
 }

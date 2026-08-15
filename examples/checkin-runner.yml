@@ -139,6 +139,11 @@ jobs:
           DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
           BARK_KEY: ${{ secrets.BARK_KEY }}
           BARK_SERVER: ${{ secrets.BARK_SERVER || 'https://api.day.app' }}
+          EMAIL: ${{ secrets.EMAIL }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT || '0' }}
+          EMAIL_AUTH_CODE: ${{ secrets.EMAIL_AUTH_CODE }}
+          EMAIL_TLS: ${{ secrets.EMAIL_TLS || 'false' }}
           OPERATION: ${{ steps.resolve.outputs.operation }}
         run: |
           printf 'operation=%s\n' "$OPERATION" >> "$GITHUB_OUTPUT"
