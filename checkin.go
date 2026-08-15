@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Rican7/retry"
@@ -37,8 +38,9 @@ func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
 	if err := jsoniter.Unmarshal(body, &result); err != nil {
 		return "", changed, fmt.Errorf("decode check-in response: %w", err)
 	}
-	if result.Ret != SuccessRetCode {
-		return result.Msg, changed, fmt.Errorf("check-in failed: ret=%d, msg=%s", result.Ret, result.Msg)
+	result.Msg = strings.TrimSpace(result.Msg)
+	if err := validateCheckInResponse(result); err != nil {
+		return result.Msg, changed, err
 	}
 	return result.Msg, changed, nil
 }
@@ -65,6 +67,17 @@ func (s *Session) KeepAlive(ctx context.Context) (bool, error) {
 
 func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool, err error) {
 	action := func(attempt uint) error {
+		// Match the browser flow: refresh the user page immediately before the
+		// check-in request so the session and any rotated cookies are current.
+		refreshed, refreshErr := session.KeepAlive(ctx)
+		changed = changed || refreshed
+		if refreshErr != nil {
+			msg = ""
+			err = refreshErr
+			logrus.Errorf("refresh user page before check-in attempt %d failed: %v", attempt+1, err)
+			return err
+		}
+
 		var attemptChanged bool
 		msg, attemptChanged, err = session.CheckIn(ctx)
 		changed = changed || attemptChanged
@@ -133,7 +146,7 @@ func AutoCheckIn(ctx context.Context, cookieHeader string) error {
 			lastCheckInDate = today
 			msg, _, err := tryCheckIn(ctx, session)
 			if err != nil {
-				_ = notifyCheckInResult(false, err.Error())
+				_ = notifyCheckInResult(false, checkInFailureMessage(msg, err))
 				continue
 			}
 			_ = notifyCheckInResult(true, msg)

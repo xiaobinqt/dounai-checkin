@@ -71,6 +71,11 @@ func (s *Session) newRequest(ctx context.Context, method, path string) (*http.Re
 	for _, name := range names {
 		req.AddCookie(s.cookies[name])
 	}
+	if method == http.MethodPost && path == "/user/checkin" {
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Referer", s.baseURL+"/user")
+		req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	}
 	return req, nil
 }
 

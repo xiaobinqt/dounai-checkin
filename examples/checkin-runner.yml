@@ -1,4 +1,5 @@
 name: Dounai session
+run-name: Dounai ${{ inputs.operation || (github.event.schedule == '17,47 9,10 * * *' && 'checkin' || 'keepalive') }}
 
 on:
   workflow_dispatch:
@@ -15,8 +16,8 @@ on:
     # 每三小时验证并刷新登录态。
     - cron: "23 */3 * * *"
       timezone: "Asia/Shanghai"
-    # 10:17 后每 30 分钟补偿触发，直到 11:47；当天成功后自动去重。
-    - cron: "17,47 10,11 * * *"
+    # 09:17 后每 30 分钟补偿触发，直到 10:47；当天成功后自动去重。
+    - cron: "17,47 9,10 * * *"
       timezone: "Asia/Shanghai"
 
 permissions:
@@ -44,8 +45,8 @@ jobs:
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             operation="$MANUAL_OPERATION"
-          elif (( 10#$local_time >= 1017 )); then
-            # 任意延迟到 10:17 之后的定时任务都可作为当天签到兜底。
+          elif (( 10#$local_time >= 917 )); then
+            # 任意延迟到 09:17 之后的定时任务都可作为当天签到兜底。
             operation="checkin"
           fi
 
@@ -67,7 +68,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_SCHEDULE: ${{ github.event.schedule }}
           PLANNED_OPERATION: ${{ steps.plan.outputs.operation }}
-          RETRY_SCHEDULE: "17,47 10,11 * * *"
+          RETRY_SCHEDULE: "17,47 9,10 * * *"
         run: |
           operation="$PLANNED_OPERATION"
           skip="false"

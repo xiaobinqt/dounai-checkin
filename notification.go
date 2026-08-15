@@ -9,11 +9,28 @@ import (
 var shanghaiTimeZone = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 func notifyCheckInResult(success bool, message string) error {
+	return notifyWithTitle(checkInNotificationTitle(success, message), message)
+}
+
+func checkInNotificationTitle(success bool, message string) string {
 	title := "❌ 豆奶签到失败"
 	if success {
 		title = "✅ 豆奶签到成功"
+		if isAlreadyCheckedInMessage(message) {
+			title = "☑️ 豆奶今日已签到"
+		}
 	}
-	return notifyWithTitle(title, message)
+	return title
+}
+
+func checkInFailureMessage(message string, err error) string {
+	if message = strings.TrimSpace(message); message != "" {
+		return message
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return "签到失败，服务端未返回原因"
 }
 
 func notifySessionFailure(message string) error {

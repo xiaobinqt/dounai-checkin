@@ -22,7 +22,7 @@ xiaobinqt/dounai-checkin (Public)
 你的 dounai-checkin-runner (Private)
               ↓
      keepalive（每 3 小时）
-     checkin（10:17 后补偿重试并按天去重）
+     checkin（09:17 后补偿重试并按天去重）
               ↓
        Cookie 失效时 Bark 提醒
 ```
@@ -104,20 +104,24 @@ Actions → Dounai session → Run workflow
 
 模板包含保活和签到补偿两个北京时间计划：
 
+Actions 运行列表会直接显示 `Dounai checkin` 或 `Dounai keepalive`，便于区分本次触发类型。
+
 ```yaml
 schedule:
   - cron: "23 */3 * * *"
     timezone: "Asia/Shanghai"
-  - cron: "17,47 10,11 * * *"
+  - cron: "17,47 9,10 * * *"
     timezone: "Asia/Shanghai"
 ```
 
 - 每天 `00:23、03:23、06:23……` 保活一次。
-- 每天 `10:17、10:47、11:17、11:47` 提供签到触发机会。
-- 任意定时任务实际启动时若已过 `10:17` 且当天尚未签到，会自动改为签到。例如 `09:23` 的保活延迟到 `10:26` 才启动时，也会成为签到兜底。
+- 每天 `09:17、09:47、10:17、10:47` 提供签到触发机会。
+- 任意定时任务实际启动时若已过 `09:17` 且当天尚未签到，会自动改为签到。例如 `06:23` 的保活延迟到 `09:26` 才启动时，也会成为签到兜底。
 - 签到成功后使用只包含北京时间日期的 Actions Cache 标记当天状态；后续补偿任务直接跳过，原本的三小时保活仍正常运行。
+- 每次签到前都会先刷新 `/user` 页面并接收服务端更新的 Cookie，再请求 `/user/checkin`。
+- 只有明确返回奖励到账、签到成功或今日已签到时才会标记成功；`ret=1` 但提示“请刷新页面后重试”仍按失败处理并继续补偿。
 
-GitHub Actions 定时任务可能因平台负载而延迟，甚至丢弃单次事件。错峰补偿和保活兜底能提高当天最终签到成功率，但不保证在 `10:17` 准点启动。工作流必须存在于默认分支。详见 [GitHub schedule 文档](https://docs.github.com/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
+GitHub Actions 定时任务可能因平台负载而延迟，甚至丢弃单次事件。错峰补偿和保活兜底能提高当天最终签到成功率，但不保证在 `09:17` 准点启动。工作流必须存在于默认分支。详见 [GitHub schedule 文档](https://docs.github.com/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
 
 ## Cookie 保活的限制
 

@@ -39,7 +39,7 @@ func main() {
 
 				msg, changed, err := CheckInOnce(c.Context, cookieHeader)
 				if err != nil {
-					if notifyErr := notifyCheckInResult(false, err.Error()); notifyErr != nil {
+					if notifyErr := notifyCheckInResult(false, checkInFailureMessage(msg, err)); notifyErr != nil {
 						logrus.Errorf("send failure notification: %v", notifyErr)
 					}
 					return err

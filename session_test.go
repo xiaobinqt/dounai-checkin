@@ -21,7 +21,8 @@ func TestNewSessionRequiresHTTPS(t *testing.T) {
 }
 
 func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var server *httptest.Server
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/user":
 			assertCookie(t, r, "uid", "123")
@@ -32,9 +33,15 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("method = %s, want POST", r.Method)
 			}
+			if r.Referer() != server.URL+"/user" {
+				t.Errorf("Referer = %q, want %q", r.Referer(), server.URL+"/user")
+			}
+			if r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
+				t.Errorf("X-Requested-With = %q", r.Header.Get("X-Requested-With"))
+			}
 			assertCookie(t, r, "key", "new-key")
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"ret":1,"msg":"获得 10MB"}`))
+			_, _ = w.Write([]byte(`{"msg":"获得了 674 MB流量和1个豆丁，账号有效期及等级 1 时长延长 1.64 小时。","ret":1}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -59,8 +66,73 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg != "获得 10MB" {
+	if msg != "获得了 674 MB流量和1个豆丁，账号有效期及等级 1 时长延长 1.64 小时。" {
 		t.Fatalf("CheckIn() message = %q", msg)
+	}
+}
+
+func TestTryCheckInRefreshesUserPageBeforePosting(t *testing.T) {
+	requestOrder := make([]string, 0, 2)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestOrder = append(requestOrder, r.Method+" "+r.URL.Path)
+		switch r.URL.Path {
+		case "/user":
+			http.SetCookie(w, &http.Cookie{Name: "key", Value: "refreshed-key", Path: "/"})
+			_, _ = w.Write([]byte("account page"))
+		case "/user/checkin":
+			assertCookie(t, r, "key", "refreshed-key")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"msg":"获得了 10 MB流量。","ret":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	session, err := NewSession(server.URL, "key=old-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.client = server.Client()
+
+	msg, changed, err := tryCheckIn(context.Background(), session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg != "获得了 10 MB流量。" {
+		t.Fatalf("tryCheckIn() message = %q", msg)
+	}
+	if !changed {
+		t.Fatal("tryCheckIn() changed = false, want true")
+	}
+	wantOrder := []string{"GET /user", "POST /user/checkin"}
+	if strings.Join(requestOrder, ",") != strings.Join(wantOrder, ",") {
+		t.Fatalf("request order = %v, want %v", requestOrder, wantOrder)
+	}
+}
+
+func TestSessionCheckInRejectsRetryMessage(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"msg":"请刷新页面后重试。","ret":1}`))
+	}))
+	defer server.Close()
+
+	session, err := NewSession(server.URL, "key=value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.client = server.Client()
+
+	msg, _, err := session.CheckIn(context.Background())
+	if err == nil {
+		t.Fatal("CheckIn() error = nil, want unconfirmed-response error")
+	}
+	if msg != "请刷新页面后重试。" {
+		t.Fatalf("CheckIn() message = %q", msg)
+	}
+	if !strings.Contains(err.Error(), "check-in not confirmed") {
+		t.Fatalf("CheckIn() error = %q", err)
 	}
 }
 
