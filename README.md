@@ -22,7 +22,7 @@ xiaobinqt/dounai-checkin (Public)
 你的 dounai-checkin-runner (Private)
               ↓
      keepalive（每 3 小时）
-     checkin（每天 10:17）
+     checkin（10:17 后补偿重试并按天去重）
               ↓
        Cookie 失效时 Bark 提醒
 ```
@@ -102,20 +102,22 @@ Actions → Dounai session → Run workflow
 
 ### 6. 自动运行时间
 
-模板包含两个北京时间计划任务：
+模板包含保活和签到补偿两个北京时间计划：
 
 ```yaml
 schedule:
   - cron: "23 */3 * * *"
     timezone: "Asia/Shanghai"
-  - cron: "17 10 * * *"
+  - cron: "17,47 10,11 * * *"
     timezone: "Asia/Shanghai"
 ```
 
 - 每天 `00:23、03:23、06:23……` 保活一次。
-- 每天 `10:17` 签到一次。
+- 每天 `10:17、10:47、11:17、11:47` 提供签到触发机会。
+- 任意定时任务实际启动时若已过 `10:17` 且当天尚未签到，会自动改为签到。例如 `09:23` 的保活延迟到 `10:26` 才启动时，也会成为签到兜底。
+- 签到成功后使用只包含北京时间日期的 Actions Cache 标记当天状态；后续补偿任务直接跳过，原本的三小时保活仍正常运行。
 
-GitHub Actions 定时任务可能因平台负载而延迟，建议继续避开整点。工作流必须存在于默认分支。详见 [GitHub schedule 文档](https://docs.github.com/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
+GitHub Actions 定时任务可能因平台负载而延迟，甚至丢弃单次事件。错峰补偿和保活兜底能提高当天最终签到成功率，但不保证在 `10:17` 准点启动。工作流必须存在于默认分支。详见 [GitHub schedule 文档](https://docs.github.com/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
 
 ## Cookie 保活的限制
 
@@ -189,6 +191,7 @@ unset DOUNAI_COOKIE_INPUT
 - Cookie 等同于登录凭据，只能保存在 GitHub Secrets 或其他专用密钥存储中。
 - 不要把 Cookie 写入命令行参数、README、工作流源码、构建产物或日志。
 - 私有 Runner 仓库应保持 Private，工作流权限保持 `contents: read`。
+- Actions Cache 中的每日签到标记只包含日期，不保存 Cookie、URL 或通知配置。
 - 程序不会记录 Cookie 内容，错误消息也不会包含 Cookie。
 - HTTP 客户端使用正常 TLS 证书校验，不再跳过 HTTPS 证书验证。
 - Cookie 失效后，在浏览器重新登录并替换 `DOUNAI_COOKIE` 即可。

@@ -15,8 +15,8 @@ on:
     # 每三小时验证并刷新登录态。
     - cron: "23 */3 * * *"
       timezone: "Asia/Shanghai"
-    # 每天北京时间 10:17 签到。
-    - cron: "17 10 * * *"
+    # 10:17 后每 30 分钟补偿触发，直到 11:47；当天成功后自动去重。
+    - cron: "17,47 10,11 * * *"
       timezone: "Asia/Shanghai"
 
 permissions:
@@ -32,7 +32,61 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Plan operation
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_OPERATION: ${{ inputs.operation }}
+        run: |
+          checkin_date="$(TZ=Asia/Shanghai date +%F)"
+          local_time="$(TZ=Asia/Shanghai date +%H%M)"
+          operation="keepalive"
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            operation="$MANUAL_OPERATION"
+          elif (( 10#$local_time >= 1017 )); then
+            # 任意延迟到 10:17 之后的定时任务都可作为当天签到兜底。
+            operation="checkin"
+          fi
+
+          printf 'checkin_date=%s\n' "$checkin_date" >> "$GITHUB_OUTPUT"
+          printf 'operation=%s\n' "$operation" >> "$GITHUB_OUTPUT"
+
+      - name: Restore daily check-in state
+        id: checkin-state
+        if: ${{ steps.plan.outputs.operation == 'checkin' }}
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/dounai-checkin-state
+          key: dounai-checkin-${{ steps.plan.outputs.checkin_date }}
+
+      - name: Resolve operation
+        id: resolve
+        env:
+          CACHE_HIT: ${{ steps.checkin-state.outputs.cache-hit }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          PLANNED_OPERATION: ${{ steps.plan.outputs.operation }}
+          RETRY_SCHEDULE: "17,47 10,11 * * *"
+        run: |
+          operation="$PLANNED_OPERATION"
+          skip="false"
+
+          if [[ "$EVENT_NAME" == "schedule" && "$operation" == "checkin" && "$CACHE_HIT" == "true" ]]; then
+            if [[ "$EVENT_SCHEDULE" == "$RETRY_SCHEDULE" ]]; then
+              # 补偿任务无需重复构建和通知。
+              skip="true"
+            else
+              # 原本的三小时保活任务仍继续保活。
+              operation="keepalive"
+            fi
+          fi
+
+          printf 'operation=%s\n' "$operation" >> "$GITHUB_OUTPUT"
+          printf 'skip=%s\n' "$skip" >> "$GITHUB_OUTPUT"
+
       - name: Checkout public source
+        if: ${{ steps.resolve.outputs.skip != 'true' }}
         uses: actions/checkout@v7
         with:
           repository: xiaobinqt/dounai-checkin
@@ -41,6 +95,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
+        if: ${{ steps.resolve.outputs.skip != 'true' }}
         uses: actions/setup-go@v7
         with:
           go-version-file: source/go.mod
@@ -48,14 +103,17 @@ jobs:
           cache-dependency-path: source/go.sum
 
       - name: Test
+        if: ${{ steps.resolve.outputs.skip != 'true' }}
         working-directory: source
         run: go test ./...
 
       - name: Build
+        if: ${{ steps.resolve.outputs.skip != 'true' }}
         working-directory: source
         run: go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/dounai" .
 
       - name: Validate configuration
+        if: ${{ steps.resolve.outputs.skip != 'true' }}
         env:
           DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
           DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
@@ -73,19 +131,26 @@ jobs:
           fi
 
       - name: Keep alive or check in
+        id: run
+        if: ${{ steps.resolve.outputs.skip != 'true' }}
         env:
           DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
           DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
           BARK_KEY: ${{ secrets.BARK_KEY }}
           BARK_SERVER: ${{ secrets.BARK_SERVER || 'https://api.day.app' }}
-          MANUAL_OPERATION: ${{ inputs.operation }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          OPERATION: ${{ steps.resolve.outputs.operation }}
         run: |
-          operation="keepalive"
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            operation="$MANUAL_OPERATION"
-          elif [[ "$EVENT_SCHEDULE" == "17 10 * * *" ]]; then
-            operation="checkin"
+          printf 'operation=%s\n' "$OPERATION" >> "$GITHUB_OUTPUT"
+          "$RUNNER_TEMP/dounai" "$OPERATION"
+
+          if [[ "$OPERATION" == "checkin" ]]; then
+            mkdir -p "$RUNNER_TEMP/dounai-checkin-state"
+            printf '%s\n' "${{ steps.plan.outputs.checkin_date }}" > "$RUNNER_TEMP/dounai-checkin-state/date"
           fi
-          "$RUNNER_TEMP/dounai" "$operation"
+
+      - name: Save daily check-in state
+        if: ${{ success() && steps.run.outputs.operation == 'checkin' && steps.checkin-state.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/dounai-checkin-state
+          key: dounai-checkin-${{ steps.plan.outputs.checkin_date }}
