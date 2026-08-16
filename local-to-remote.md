@@ -52,6 +52,8 @@ DOUNAI_URL
 BARK_KEY
 ```
 
+若希望 self-hosted runner 也自动保存服务端旋转后的 Cookie，可按主 README 的说明配置仅限当前私有仓库、具有 `Secrets: Read and write` 权限的 `COOKIE_UPDATE_TOKEN`。
+
 ## 5. 验证
 
 在 Actions 页面手动执行：
@@ -66,4 +68,4 @@ BARK_KEY
 - self-hosted runner 只用于受信任的私有仓库和工作流。
 - 定期更新操作系统、GitHub Runner 和 Go。
 - 不要在 Runner 日志中输出环境变量。
-- Cookie 失效后只需更新 GitHub Secret，不需要修改源码。
+- Cookie 无法继续保活后只需更新 GitHub Secret，不需要修改源码。

@@ -11,6 +11,7 @@ type Conf struct {
 	CheckInTime   string `json:"checkin_time"`
 	BarkKey       string `json:"bark_key"`
 	BarkServer    string `json:"bark_server"`
+	CookieOutput  string `json:"-"`
 }
 
 var conf *Conf
@@ -57,6 +58,10 @@ func SetBarkKey(barkKey string) {
 
 func SetBarkServer(barkServer string) {
 	conf.BarkServer = barkServer
+}
+
+func SetCookieOutput(cookieOutput string) {
+	conf.CookieOutput = cookieOutput
 }
 
 func GetConf() *Conf {

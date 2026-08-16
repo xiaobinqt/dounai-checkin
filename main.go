@@ -128,6 +128,11 @@ func sessionFlags(withSchedule bool) []cli.Flag {
 			EnvVars: []string{"DOUNAI_URL"},
 			Usage:   "dounai URL, for example https://example.com",
 		},
+		&cli.StringFlag{
+			Name:    "cookie_output",
+			EnvVars: []string{"DOUNAI_COOKIE_OUTPUT"},
+			Usage:   "write a refreshed Cookie header to this file with mode 0600",
+		},
 	}
 	flags = append(flags, emailFlags()...)
 	flags = append(flags,
@@ -190,6 +195,7 @@ func configureSession(c *cli.Context, withSchedule bool) (string, error) {
 	configureEmail(c)
 	SetBarkKey(strings.TrimSpace(c.String("bark_key")))
 	SetBarkServer(strings.TrimRight(strings.TrimSpace(c.String("bark_server")), "/"))
+	SetCookieOutput(strings.TrimSpace(c.String("cookie_output")))
 
 	if cookieHeader == "" {
 		return "", fmt.Errorf("dounai_cookie is required")
@@ -212,8 +218,10 @@ func configureSession(c *cli.Context, withSchedule bool) (string, error) {
 }
 
 func warnCookieChanged(changed bool) {
-	if changed {
+	if changed && GetConf().CookieOutput == "" {
 		logrus.Warn("server returned updated session cookies; they are active only for this process, so DOUNAI_COOKIE may need to be replaced when the stored session expires")
+	} else if changed {
+		logrus.Info("server returned updated session cookies; refreshed Cookie header was saved")
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -33,11 +35,17 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("method = %s, want POST", r.Method)
 			}
-			if r.Referer() != server.URL+"/user" {
-				t.Errorf("Referer = %q, want %q", r.Referer(), server.URL+"/user")
+			if r.Referer() != server.URL+"/user/panel" {
+				t.Errorf("Referer = %q, want %q", r.Referer(), server.URL+"/user/panel")
+			}
+			if r.Header.Get("Origin") != server.URL {
+				t.Errorf("Origin = %q, want %q", r.Header.Get("Origin"), server.URL)
 			}
 			if r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
 				t.Errorf("X-Requested-With = %q", r.Header.Get("X-Requested-With"))
+			}
+			if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded; charset=UTF-8" {
+				t.Errorf("Content-Type = %q", r.Header.Get("Content-Type"))
 			}
 			assertCookie(t, r, "key", "new-key")
 			w.Header().Set("Content-Type", "application/json")
@@ -71,14 +79,14 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 	}
 }
 
-func TestTryCheckInRefreshesUserPageBeforePosting(t *testing.T) {
+func TestTryCheckInRefreshesUserPanelBeforePosting(t *testing.T) {
 	requestOrder := make([]string, 0, 2)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestOrder = append(requestOrder, r.Method+" "+r.URL.Path)
 		switch r.URL.Path {
-		case "/user":
+		case "/user/panel":
 			http.SetCookie(w, &http.Cookie{Name: "key", Value: "refreshed-key", Path: "/"})
-			_, _ = w.Write([]byte("account page"))
+			_, _ = w.Write([]byte("user panel"))
 		case "/user/checkin":
 			assertCookie(t, r, "key", "refreshed-key")
 			w.Header().Set("Content-Type", "application/json")
@@ -105,7 +113,7 @@ func TestTryCheckInRefreshesUserPageBeforePosting(t *testing.T) {
 	if !changed {
 		t.Fatal("tryCheckIn() changed = false, want true")
 	}
-	wantOrder := []string{"GET /user", "POST /user/checkin"}
+	wantOrder := []string{"GET /user/panel", "POST /user/checkin"}
 	if strings.Join(requestOrder, ",") != strings.Join(wantOrder, ",") {
 		t.Fatalf("request order = %v, want %v", requestOrder, wantOrder)
 	}
@@ -133,6 +141,70 @@ func TestSessionCheckInRejectsRetryMessage(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "check-in not confirmed") {
 		t.Fatalf("CheckIn() error = %q", err)
+	}
+}
+
+func TestSessionWritesChangedCookiesToSecureOutput(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "key", Value: "new-key", Path: "/"})
+		_, _ = w.Write([]byte("account page"))
+	}))
+	defer server.Close()
+
+	session, err := NewSession(server.URL, "uid=123; key=old-key; PHPSESSID=session-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.client = server.Client()
+	output := filepath.Join(t.TempDir(), "cookie")
+	if err := session.SetCookieOutput(output); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := session.KeepAlive(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("KeepAlive() changed = false, want true")
+	}
+
+	contents, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(contents), "PHPSESSID=session-id; key=new-key; uid=123\n"; got != want {
+		t.Fatalf("cookie output = %q, want %q", got, want)
+	}
+	info, err := os.Stat(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("cookie output mode = %o, want 600", got)
+	}
+}
+
+func TestSessionDoesNotWriteUnchangedCookies(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("account page"))
+	}))
+	defer server.Close()
+
+	session, err := NewSession(server.URL, "key=unchanged")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.client = server.Client()
+	output := filepath.Join(t.TempDir(), "cookie")
+	if err := session.SetCookieOutput(output); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.KeepAlive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("cookie output stat error = %v, want not-exist", err)
 	}
 }
 

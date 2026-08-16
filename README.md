@@ -9,7 +9,7 @@
 - 签到失败时最多重试三次
 - 登录态失效时发送 Bark 提醒；北京时间 00:00–08:59 静默
 - 签到成功或失败时发送 Bark 通知
-- 服务端在当前进程中更新 Cookie 时自动接收新值
+- 自动接收服务端更新的 Cookie，并可安全回写 runner 的 GitHub Secret
 - 支持 GitHub Actions、本地命令和常驻模式
 
 ## 工作方式
@@ -85,6 +85,7 @@ Settings → Secrets and variables → Actions → New repository secret
 | --- | --- | --- |
 | `DOUNAI_URL` | 是 | 豆奶服务完整 HTTPS 地址 |
 | `DOUNAI_COOKIE` | 是 | 浏览器中复制的完整 Cookie 请求头 |
+| `COOKIE_UPDATE_TOKEN` | 否 | GitHub 生成的完整 Fine-grained PAT，不是 `true/false`；通常以 `github_pat_` 开头，仅授权当前私有 runner 仓库的 `Secrets: Read and write` |
 | `BARK_KEY` | 是 | Bark 推送地址最后一段的设备 Key |
 | `BARK_SERVER` | 否 | Bark 服务地址，默认 `https://api.day.app` |
 | `EMAIL` | 否 | 邮件通知的发件人和收件人邮箱 |
@@ -103,6 +104,31 @@ Settings → Secrets and variables → Actions → New repository secret
 多数邮箱服务要求填写 SMTP 授权码或应用专用密码，而不是网页登录密码。可选通知发送失败会记录错误，但不会把已经成功的签到改判为失败。
 
 不再需要豆奶登录用的 `DOUNAI_EMAIL` 和 `DOUNAI_PASSWORD`。上面的 `EMAIL` 和 `EMAIL_AUTH_CODE` 只用于可选的 SMTP 通知，Action 不会使用它们登录豆奶。
+
+#### 创建 `COOKIE_UPDATE_TOKEN`
+
+GitHub 默认提供给工作流的 `GITHUB_TOKEN` 不能修改 Actions Secrets。若要让保活自动保存服务端返回的新 Cookie，需要单独创建一个最小权限的 fine-grained personal access token：
+
+`COOKIE_UPDATE_TOKEN` 的值是 GitHub 最后生成并显示的完整 token 字符串，不是布尔开关，不能填写 `true`、`false`、token 名称或仓库名称。格式通常类似下面这样，实际值会更长：
+
+```text
+github_pat_11AAAAAAA0_example_redacted
+```
+
+上面只是脱敏格式示例，不能直接使用。
+
+1. 登录 GitHub，打开 [Fine-grained personal access tokens](https://github.com/settings/personal-access-tokens)，点击 `Generate new token`。
+2. `Token name` 填写 `dounai-cookie-updater`。
+3. `Expiration` 选择合适的有效期，例如 `90 days`。到期前需要生成新 token 并覆盖下面的 Secret。
+4. `Resource owner` 选择拥有私有 `dounai-checkin-runner` 仓库的个人账号或组织。
+5. `Repository access` 选择 `Only select repositories`，然后只勾选 `dounai-checkin-runner`。不要选择全部仓库。
+6. 展开 `Repository permissions`，找到 `Secrets`，设置为 `Read and write`；其他可选权限保持 `No access`。`Metadata: Read-only` 是 GitHub 自动授予的基础权限。
+7. 点击 `Generate token`，立即复制生成的 token。GitHub 只会完整显示一次。
+8. 进入私有 runner 仓库：`Settings → Secrets and variables → Actions → New repository secret`。
+9. `Name` 填写 `COOKIE_UPDATE_TOKEN`，`Secret` 粘贴第 7 步复制的完整 `github_pat_...` token，然后保存。不要填写 `true` 或 `false`。这个 Secret 必须建在私有 runner 仓库，不能建在公开源码仓库。
+10. 进入 `Actions → Dounai session → Run workflow`，手动运行一次 `keepalive`。如果本次服务端旋转了 Cookie，日志会出现 `DOUNAI_COOKIE was updated`；没有返回新 Cookie 时，回写步骤会正常跳过。
+
+工作流只在 Cookie 实际变化时调用 GitHub API，并通过 `gh secret set` 在 runner 本地加密后覆盖 `DOUNAI_COOKIE`。未配置 token 时签到和保活仍正常运行，但 Cookie 发生变化时会输出警告并继续使用原 Secret。token 等同于密码，不要放进源码、README、Issue、聊天或 Actions 日志。若 token 显示为 `Pending`，说明所属组织要求管理员审批，批准前无法更新 Secret。详细流程见 [GitHub 官方 PAT 文档](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)。
 
 ### 5. 手动验证
 
@@ -132,7 +158,7 @@ schedule:
 - 每天 `09:17、09:47、10:17、10:47` 提供签到触发机会。
 - 任意定时任务实际启动时若已过 `09:17` 且当天尚未签到，会自动改为签到。例如 `06:23` 的保活延迟到 `09:26` 才启动时，也会成为签到兜底。
 - 签到成功后使用只包含北京时间日期的 Actions Cache 标记当天状态；后续补偿任务直接跳过，原本的三小时保活仍正常运行。
-- 每次签到前都会先刷新 `/user` 页面并接收服务端更新的 Cookie，再请求 `/user/checkin`。
+- 每次签到前都会先加载实际包含签到按钮的 `/user/panel` 页面并接收服务端更新的 Cookie，再以页面相同的 AJAX 请求方式调用 `/user/checkin`。
 - 只有明确返回奖励到账、签到成功或今日已签到时才会标记成功；`ret=1` 但提示“请刷新页面后重试”仍按失败处理并继续补偿。
 
 GitHub Actions 定时任务可能因平台负载而延迟，甚至丢弃单次事件。错峰补偿和保活兜底能提高当天最终签到成功率，但不保证在 `09:17` 准点启动。工作流必须存在于默认分支。详见 [GitHub schedule 文档](https://docs.github.com/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
@@ -143,11 +169,11 @@ GitHub Actions 定时任务可能因平台负载而延迟，甚至丢弃单次�
 
 - HTTP 2xx：当前会话有效。
 - HTTP 401、403 或跳回登录页：会话失效，让 Action 失败；北京时间 09:00–23:59 发送 Bark 提醒。
-- 服务端返回新的 `Set-Cookie`：当前进程会使用新 Cookie，但 GitHub Secret 不会被自动改写。
+- 服务端返回新的 `Set-Cookie`：当前进程会立即使用新 Cookie；配置 `COOKIE_UPDATE_TOKEN` 后，runner 还会将完整的新 Cookie 安全回写到 `DOUNAI_COOKIE`，供下次任务使用。
 
 有两个服务端行为无法由本工具保证：
 
-1. 如果 Cookie 是固定期限而非滑动过期，定时访问不会无限续期，到期后仍需手动登录并更新 `DOUNAI_COOKIE`。
+1. 如果 Cookie 是固定期限而非滑动过期，或服务端没有通过 `Set-Cookie` 下发可续期凭据，到期后仍需手动登录并更新 `DOUNAI_COOKIE`。
 2. Cookie 中包含 `ip`。如果服务端校验登录 IP，浏览器登录 IP 与 GitHub 托管 Runner IP 不同会导致会话失效；此时应使用固定网络出口的 [self-hosted runner](local-to-remote.md)。
 
 ## 本地使用
@@ -197,6 +223,7 @@ unset DOUNAI_COOKIE_INPUT
 | 参数 | 环境变量 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- | --- |
 | `--dounai_url` | `DOUNAI_URL` | 是 | - | 豆奶服务完整 HTTPS URL |
+| `--cookie_output` | `DOUNAI_COOKIE_OUTPUT` | 否 | - | Cookie 发生变化时，将完整请求头以 `0600` 权限写入指定文件 |
 | `--cookie` | `DOUNAI_COOKIE` | 是 | - | 完整 Cookie 请求头 |
 | `--bark_key` | `BARK_KEY` | Action 模板必填 | - | Bark 设备 Key |
 | `--bark_server` | `BARK_SERVER` | 否 | `https://api.day.app` | Bark 服务地址 |

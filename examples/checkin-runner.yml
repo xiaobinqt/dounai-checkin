@@ -144,15 +144,36 @@ jobs:
           EMAIL_PORT: ${{ secrets.EMAIL_PORT || '0' }}
           EMAIL_AUTH_CODE: ${{ secrets.EMAIL_AUTH_CODE }}
           EMAIL_TLS: ${{ secrets.EMAIL_TLS || 'false' }}
+          DOUNAI_COOKIE_OUTPUT: ${{ runner.temp }}/dounai-session/cookie
           OPERATION: ${{ steps.resolve.outputs.operation }}
         run: |
           printf 'operation=%s\n' "$OPERATION" >> "$GITHUB_OUTPUT"
+          mkdir -p "$(dirname "$DOUNAI_COOKIE_OUTPUT")"
           "$RUNNER_TEMP/dounai" "$OPERATION"
 
           if [[ "$OPERATION" == "checkin" ]]; then
             mkdir -p "$RUNNER_TEMP/dounai-checkin-state"
             printf '%s\n' "${{ steps.plan.outputs.checkin_date }}" > "$RUNNER_TEMP/dounai-checkin-state/date"
           fi
+
+      - name: Persist refreshed cookie
+        if: ${{ success() && steps.resolve.outputs.skip != 'true' }}
+        env:
+          COOKIE_FILE: ${{ runner.temp }}/dounai-session/cookie
+          GH_TOKEN: ${{ secrets.COOKIE_UPDATE_TOKEN }}
+        run: |
+          if [[ ! -s "$COOKIE_FILE" ]]; then
+            exit 0
+          fi
+          trap 'shred -u "$COOKIE_FILE"' EXIT
+
+          if [[ -z "$GH_TOKEN" ]]; then
+            printf '::warning::Session cookies changed, but COOKIE_UPDATE_TOKEN is not configured; DOUNAI_COOKIE was not updated.\n'
+            exit 0
+          fi
+
+          gh secret set DOUNAI_COOKIE --repo "$GITHUB_REPOSITORY" < "$COOKIE_FILE"
+          printf '::notice::DOUNAI_COOKIE was updated with the refreshed session cookies.\n'
 
       - name: Save daily check-in state
         if: ${{ success() && steps.run.outputs.operation == 'checkin' && steps.checkin-state.outputs.cache-hit != 'true' }}

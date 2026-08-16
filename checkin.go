@@ -46,7 +46,18 @@ func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
 }
 
 func (s *Session) KeepAlive(ctx context.Context) (bool, error) {
-	resp, changed, err := s.do(ctx, http.MethodGet, "/user")
+	return s.loadAuthenticatedPage(ctx, "/user")
+}
+
+// PrepareCheckIn loads the page that owns the check-in button. Besides
+// validating the session, this lets the server initialize any page-scoped
+// state and rotate cookies before the AJAX request is sent.
+func (s *Session) PrepareCheckIn(ctx context.Context) (bool, error) {
+	return s.loadAuthenticatedPage(ctx, "/user/panel")
+}
+
+func (s *Session) loadAuthenticatedPage(ctx context.Context, path string) (bool, error) {
+	resp, changed, err := s.do(ctx, http.MethodGet, path)
 	if err != nil {
 		return changed, err
 	}
@@ -67,14 +78,14 @@ func (s *Session) KeepAlive(ctx context.Context) (bool, error) {
 
 func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool, err error) {
 	action := func(attempt uint) error {
-		// Match the browser flow: refresh the user page immediately before the
-		// check-in request so the session and any rotated cookies are current.
-		refreshed, refreshErr := session.KeepAlive(ctx)
+		// Match the browser flow: load the panel that owns the check-in button
+		// immediately before its AJAX request.
+		refreshed, refreshErr := session.PrepareCheckIn(ctx)
 		changed = changed || refreshed
 		if refreshErr != nil {
 			msg = ""
 			err = refreshErr
-			logrus.Errorf("refresh user page before check-in attempt %d failed: %v", attempt+1, err)
+			logrus.Errorf("refresh user panel before check-in attempt %d failed: %v", attempt+1, err)
 			return err
 		}
 
@@ -95,7 +106,7 @@ func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool
 }
 
 func CheckInOnce(ctx context.Context, cookieHeader string) (string, bool, error) {
-	session, err := NewSession(GetConf().DouNaiURL, cookieHeader)
+	session, err := newConfiguredSession(cookieHeader)
 	if err != nil {
 		return "", false, err
 	}
@@ -103,7 +114,7 @@ func CheckInOnce(ctx context.Context, cookieHeader string) (string, bool, error)
 }
 
 func KeepAliveOnce(ctx context.Context, cookieHeader string) (bool, error) {
-	session, err := NewSession(GetConf().DouNaiURL, cookieHeader)
+	session, err := newConfiguredSession(cookieHeader)
 	if err != nil {
 		return false, err
 	}
@@ -111,7 +122,7 @@ func KeepAliveOnce(ctx context.Context, cookieHeader string) (bool, error) {
 }
 
 func AutoCheckIn(ctx context.Context, cookieHeader string) error {
-	session, err := NewSession(GetConf().DouNaiURL, cookieHeader)
+	session, err := newConfiguredSession(cookieHeader)
 	if err != nil {
 		return err
 	}
@@ -152,4 +163,15 @@ func AutoCheckIn(ctx context.Context, cookieHeader string) error {
 			_ = notifyCheckInResult(true, msg)
 		}
 	}
+}
+
+func newConfiguredSession(cookieHeader string) (*Session, error) {
+	session, err := NewSession(GetConf().DouNaiURL, cookieHeader)
+	if err != nil {
+		return nil, err
+	}
+	if err := session.SetCookieOutput(GetConf().CookieOutput); err != nil {
+		return nil, err
+	}
+	return session, nil
 }
