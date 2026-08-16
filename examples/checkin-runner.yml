@@ -157,23 +157,35 @@ jobs:
           fi
 
       - name: Persist refreshed cookie
-        if: ${{ success() && steps.resolve.outputs.skip != 'true' }}
+        if: ${{ always() && steps.resolve.outputs.skip != 'true' }}
         env:
           COOKIE_FILE: ${{ runner.temp }}/dounai-session/cookie
           GH_TOKEN: ${{ secrets.COOKIE_UPDATE_TOKEN }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
         run: |
-          if [[ ! -s "$COOKIE_FILE" ]]; then
+          if [[ -s "$COOKIE_FILE" ]]; then
+            trap 'shred -u "$COOKIE_FILE"' EXIT
+          fi
+
+          if [[ "$RUN_OUTCOME" != "success" ]]; then
             exit 0
           fi
-          trap 'shred -u "$COOKIE_FILE"' EXIT
+
+          if [[ ! -s "$COOKIE_FILE" ]]; then
+            printf '::notice::No cookie changes; DOUNAI_COOKIE remains unchanged.\n'
+            printf '### Cookie persistence\n\nNo cookie changes; `DOUNAI_COOKIE` remains unchanged.\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           if [[ -z "$GH_TOKEN" ]]; then
             printf '::warning::Session cookies changed, but COOKIE_UPDATE_TOKEN is not configured; DOUNAI_COOKIE was not updated.\n'
+            printf '### Cookie persistence\n\nSession cookies changed, but `COOKIE_UPDATE_TOKEN` is not configured.\n' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
           gh secret set DOUNAI_COOKIE --repo "$GITHUB_REPOSITORY" < "$COOKIE_FILE"
           printf '::notice::DOUNAI_COOKIE was updated with the refreshed session cookies.\n'
+          printf '### Cookie persistence\n\n`DOUNAI_COOKIE` was updated with refreshed session cookies.\n' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save daily check-in state
         if: ${{ success() && steps.run.outputs.operation == 'checkin' && steps.checkin-state.outputs.cache-hit != 'true' }}

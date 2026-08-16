@@ -126,9 +126,9 @@ github_pat_11AAAAAAA0_example_redacted
 7. 点击 `Generate token`，立即复制生成的 token。GitHub 只会完整显示一次。
 8. 进入私有 runner 仓库：`Settings → Secrets and variables → Actions → New repository secret`。
 9. `Name` 填写 `COOKIE_UPDATE_TOKEN`，`Secret` 粘贴第 7 步复制的完整 `github_pat_...` token，然后保存。不要填写 `true` 或 `false`。这个 Secret 必须建在私有 runner 仓库，不能建在公开源码仓库。
-10. 进入 `Actions → Dounai session → Run workflow`，手动运行一次 `keepalive`。如果本次服务端旋转了 Cookie，日志会出现 `DOUNAI_COOKIE was updated`；没有返回新 Cookie 时，回写步骤会正常跳过。
+10. 进入 `Actions → Dounai session → Run workflow`，手动运行一次 `keepalive`。如果本次服务端旋转了 Cookie，日志会出现 `DOUNAI_COOKIE was updated`；没有返回新 Cookie 时，任务摘要会明确显示 Secret 保持不变。
 
-工作流只在 Cookie 实际变化时调用 GitHub API，并通过 `gh secret set` 在 runner 本地加密后覆盖 `DOUNAI_COOKIE`。未配置 token 时签到和保活仍正常运行，但 Cookie 发生变化时会输出警告并继续使用原 Secret。token 等同于密码，不要放进源码、README、Issue、聊天或 Actions 日志。若 token 显示为 `Pending`，说明所属组织要求管理员审批，批准前无法更新 Secret。详细流程见 [GitHub 官方 PAT 文档](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)。
+工作流只在 Cookie 的名称或值实际变化时调用 GitHub API，并通过 `gh secret set` 在 runner 本地加密后覆盖 `DOUNAI_COOKIE`。没有变化时不重写相同 Secret；`DOUNAI_COOKIE` 的更新时间不是会话健康指标，`keepalive` 成功才表示当前会话有效。未配置 token 时签到和保活仍正常运行，但 Cookie 发生变化时不会自动回写。token 等同于密码，不要放进源码、README、Issue、聊天或 Actions 日志。若 token 显示为 `Pending`，说明所属组织要求管理员审批，批准前无法更新 Secret。详细流程见 [GitHub 官方 PAT 文档](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)。
 
 ### 5. 手动验证
 
@@ -169,7 +169,7 @@ GitHub Actions 定时任务可能因平台负载而延迟，甚至丢弃单次�
 
 - HTTP 2xx：当前会话有效。
 - HTTP 401、403 或跳回登录页：会话失效，让 Action 失败；北京时间 09:00–23:59 发送 Bark 提醒。
-- 服务端返回新的 `Set-Cookie`：当前进程会立即使用新 Cookie；配置 `COOKIE_UPDATE_TOKEN` 后，runner 还会将完整的新 Cookie 安全回写到 `DOUNAI_COOKIE`，供下次任务使用。
+- 服务端返回新的 `Set-Cookie`：当前进程会立即使用新 Cookie；配置 `COOKIE_UPDATE_TOKEN` 后，runner 只在 Cookie 名称或值实际变化时安全覆盖 `DOUNAI_COOKIE`，供下次任务使用。
 
 有两个服务端行为无法由本工具保证：
 
