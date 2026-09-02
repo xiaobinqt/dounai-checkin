@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -24,7 +25,8 @@ type Session struct {
 	client  *http.Client
 	cookies map[string]*http.Cookie
 
-	cookieOutput string
+	cookieOutput      string
+	captchaRecognizer CaptchaRecognizer
 }
 
 // SetCookieOutput configures an optional file that receives the complete
@@ -115,11 +117,19 @@ func (s *Session) newRequest(ctx context.Context, method, path string) (*http.Re
 }
 
 func (s *Session) do(ctx context.Context, method, path string) (*http.Response, bool, error) {
+	return s.doRequest(ctx, method, path, nil)
+}
+
+func (s *Session) doRequest(ctx context.Context, method, path string, body []byte) (*http.Response, bool, error) {
 	req, err := s.newRequest(ctx, method, path)
 	if err != nil {
 		return nil, false, err
 	}
 
+	if body != nil {
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
+	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, false, fmt.Errorf("request %s: %w", path, err)
