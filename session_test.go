@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"image"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,6 +32,8 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 			assertCookie(t, r, "key", "old-key")
 			http.SetCookie(w, &http.Cookie{Name: "key", Value: "new-key", Path: "/"})
 			_, _ = w.Write([]byte("account page"))
+		case "/auth/captcha":
+			writeTestCaptcha(w)
 		case "/user/checkin":
 			if r.Method != http.MethodPost {
 				t.Errorf("method = %s, want POST", r.Method)
@@ -61,6 +64,7 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	session.client = server.Client()
+	session.captchaRecognizer = testCaptchaRecognizer
 	session.client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	changed, err := session.KeepAlive(context.Background())
 	if err != nil {
@@ -87,6 +91,8 @@ func TestTryCheckInRefreshesUserPanelBeforePosting(t *testing.T) {
 		case "/user/panel":
 			http.SetCookie(w, &http.Cookie{Name: "key", Value: "refreshed-key", Path: "/"})
 			_, _ = w.Write([]byte("user panel"))
+		case "/auth/captcha":
+			writeTestCaptcha(w)
 		case "/user/checkin":
 			assertCookie(t, r, "key", "refreshed-key")
 			w.Header().Set("Content-Type", "application/json")
@@ -102,6 +108,7 @@ func TestTryCheckInRefreshesUserPanelBeforePosting(t *testing.T) {
 		t.Fatal(err)
 	}
 	session.client = server.Client()
+	session.captchaRecognizer = testCaptchaRecognizer
 
 	msg, changed, err := tryCheckIn(context.Background(), session)
 	if err != nil {
@@ -113,14 +120,18 @@ func TestTryCheckInRefreshesUserPanelBeforePosting(t *testing.T) {
 	if !changed {
 		t.Fatal("tryCheckIn() changed = false, want true")
 	}
-	wantOrder := []string{"GET /user/panel", "POST /user/checkin"}
+	wantOrder := []string{"GET /user/panel", "GET /auth/captcha", "POST /user/checkin"}
 	if strings.Join(requestOrder, ",") != strings.Join(wantOrder, ",") {
 		t.Fatalf("request order = %v, want %v", requestOrder, wantOrder)
 	}
 }
 
 func TestSessionCheckInRejectsRetryMessage(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth/captcha" {
+			writeTestCaptcha(w)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"msg":"请刷新页面后重试。","ret":1}`))
 	}))
@@ -131,6 +142,7 @@ func TestSessionCheckInRejectsRetryMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	session.client = server.Client()
+	session.captchaRecognizer = testCaptchaRecognizer
 
 	msg, _, err := session.CheckIn(context.Background())
 	if err == nil {
@@ -278,3 +290,10 @@ func assertCookie(t *testing.T, r *http.Request, name, want string) {
 		t.Fatalf("cookie %q = %q, want %q", name, cookie.Value, want)
 	}
 }
+
+func writeTestCaptcha(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ret":1,"svg":"<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\">"}`))
+}
+
+func testCaptchaRecognizer(image.Image) (string, error) { return "1234", nil }

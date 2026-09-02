@@ -18,17 +18,11 @@ import (
 const keepAliveInterval = 3 * time.Hour
 
 func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
-	var requestBody []byte
-	// The official service currently enforces the captcha. Keeping the small
-	// compatibility branch allows older/self-hosted mirrors that do not expose
-	// /auth/captcha to continue using the legacy check-in endpoint.
-	if strings.Contains(strings.ToLower(s.baseURL), "dounai.pro") || s.captchaRecognizer != nil {
-		code, err := s.fetchCaptcha(ctx, s.captchaRecognizer)
-		if err != nil {
-			return "", false, err
-		}
-		requestBody = []byte(url.Values{"captcha_code": {code}}.Encode())
+	code, err := s.fetchCaptcha(ctx, s.captchaRecognizer)
+	if err != nil {
+		return "", false, err
 	}
+	requestBody := []byte(url.Values{"captcha_code": {code}}.Encode())
 	resp, changed, err := s.doRequest(ctx, http.MethodPost, "/user/checkin", requestBody)
 	if err != nil {
 		return "", changed, err
