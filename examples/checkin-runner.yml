@@ -113,6 +113,16 @@ jobs:
         working-directory: source
         run: go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/dounai" .
 
+      - name: Install captcha OCR assets
+        if: ${{ steps.resolve.outputs.skip != 'true' }}
+        run: |
+          mkdir -p source/models
+          curl -fsSL -o source/models/common_old.onnx https://github.com/yangbin1322/go-ddddocr/releases/download/v1.0.1/common_old.onnx
+          curl -fsSL -o source/models/charsets_old.json https://github.com/yangbin1322/go-ddddocr/releases/download/v1.0.1/charsets_old.json
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz |
+            tar -xz -C source/models --strip-components=2 onnxruntime-linux-x64-1.23.2/lib/libonnxruntime.so.1.23.2
+          mv source/models/libonnxruntime.so.1.23.2 source/models/libonnxruntime.so
+
       - name: Validate configuration
         if: ${{ steps.resolve.outputs.skip != 'true' }}
         env:
@@ -145,6 +155,7 @@ jobs:
           EMAIL_AUTH_CODE: ${{ secrets.EMAIL_AUTH_CODE }}
           EMAIL_TLS: ${{ secrets.EMAIL_TLS || 'false' }}
           DOUNAI_COOKIE_OUTPUT: ${{ runner.temp }}/dounai-session/cookie
+          DOUNAI_OCR_MODEL_DIR: ${{ github.workspace }}/source/models
           OPERATION: ${{ steps.resolve.outputs.operation }}
         run: |
           printf 'operation=%s\n' "$OPERATION" >> "$GITHUB_OUTPUT"

@@ -12,12 +12,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/yangbin1322/go-ddddocr/ddddocr"
 )
 
 var captchaDataRE = regexp.MustCompile(`(?i)data:image/[^;]+;base64,([A-Za-z0-9+/=]+)`)
+var captchaCodeRE = regexp.MustCompile(`^[0-9]{4}$`)
 
 // CaptchaRecognizer is injectable so deployments can provide a specialised
 // OCR implementation while keeping the HTTP flow testable.
@@ -70,46 +77,46 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 		return "", err
 	}
 	code = strings.TrimSpace(code)
-	if len(code) != 4 {
+	if !captchaCodeRE.MatchString(code) {
 		return "", fmt.Errorf("captcha recognizer returned %q, want four digits", code)
 	}
 	return code, nil
 }
 
-var digitPatterns = [...]string{"111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001001001001", "111101111101111", "111101111001111"}
+var (
+	captchaOCROnce sync.Once
+	captchaOCR     *ddddocr.DdddOcr
+	captchaOCRErr  error
+	captchaOCRMu   sync.Mutex
+)
 
-// recognizeCaptcha is deliberately dependency-free. The site renders one
-// coloured digit in each quarter of a fixed 160x54 image; downsampling each
-// quarter to a 3x5 bitmap makes recognition tolerant of the crossing noise.
 func recognizeCaptcha(img image.Image) (string, error) {
-	b := img.Bounds()
-	var out strings.Builder
-	for pos := 0; pos < 4; pos++ {
-		var best byte
-		bestScore := int(^uint(0) >> 1)
-		for d, pat := range digitPatterns {
-			score := 0
-			for y := 0; y < 5; y++ {
-				for x := 0; x < 3; x++ {
-					want := pat[(y*3+x)*1] == '1'
-					px := b.Min.X + pos*b.Dx()/4 + (x+1)*b.Dx()/20
-					py := b.Min.Y + (y+1)*b.Dy()/6
-					c := img.At(px, py)
-					r, g, bl, a := c.RGBA()
-					on := a > 0x4000 && (r+g+bl)/3 > 0x5000
-					if on != want {
-						score++
-					}
-				}
-			}
-			if score < bestScore {
-				bestScore, best = score, byte('0'+d)
-			}
-		}
-		if best == 0 {
-			return "", fmt.Errorf("captcha recognition failed")
-		}
-		out.WriteByte(best)
+	var input bytes.Buffer
+	if err := png.Encode(&input, img); err != nil {
+		return "", fmt.Errorf("encode captcha for OCR: %w", err)
 	}
-	return out.String(), nil
+	captchaOCROnce.Do(func() {
+		modelDir := strings.TrimSpace(os.Getenv("DOUNAI_OCR_MODEL_DIR"))
+		if modelDir == "" {
+			modelDir = "models"
+		}
+		runtimeLibrary := map[string]string{"linux": "libonnxruntime.so", "darwin": "libonnxruntime.dylib", "windows": "onnxruntime.dll"}[runtime.GOOS]
+		ddddocr.SetOnnxRuntimePath(filepath.Join(modelDir, runtimeLibrary))
+		opts := ddddocr.DefaultOptions()
+		opts.ModelDir = modelDir
+		captchaOCR, captchaOCRErr = ddddocr.New(opts)
+		if captchaOCRErr == nil {
+			captchaOCR.SetRanges(ddddocr.RangeDigit)
+		}
+	})
+	if captchaOCRErr != nil {
+		return "", fmt.Errorf("initialize captcha OCR: %w", captchaOCRErr)
+	}
+	captchaOCRMu.Lock()
+	defer captchaOCRMu.Unlock()
+	result, err := captchaOCR.ClassificationWithOptions(input.Bytes(), ddddocr.ClassificationOptions{})
+	if err != nil {
+		return "", fmt.Errorf("recognize captcha: %w", err)
+	}
+	return strings.TrimSpace(result), nil
 }
