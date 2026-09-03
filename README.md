@@ -184,7 +184,7 @@ GitHub Actions 定时任务可能因平台负载而延迟，甚至丢弃单次�
 go build -trimpath -ldflags="-s -w" -o dounai .
 ```
 
-项目使用 `go-ddddocr` 识别签到验证码，需要 Go 1.25，并在运行目录的 `models` 子目录中放置 `common_old.onnx`、`charsets_old.json` 和 ONNX Runtime 1.23.2 动态库。也可通过 `DOUNAI_OCR_MODEL_DIR` 指定模型目录。Docker 镜像和示例 GitHub Actions 工作流会自动安装这些文件。
+项目使用 `go-ddddocr` 识别签到验证码，并自动计算简单的加减乘除验证码。构建需要 Go 1.25，运行目录的 `models` 子目录中需要放置 `common_old.onnx`、`charsets_old.json` 和 ONNX Runtime 1.23.2 动态库。也可通过 `DOUNAI_OCR_MODEL_DIR` 指定模型目录。Docker 镜像和示例 GitHub Actions 工作流会自动安装这些文件。
 
 为避免 Cookie 出现在 shell 历史中，可静默读取：
 

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,13 +25,15 @@ import (
 )
 
 var captchaDataRE = regexp.MustCompile(`(?i)data:image/[^;]+;base64,([A-Za-z0-9+/=]+)`)
-var captchaCodeRE = regexp.MustCompile(`^[0-9]{4}$`)
+var captchaAnswerRE = regexp.MustCompile(`^(?:[0-9]{4}|-?[0-9]{1,3})$`)
+var captchaExpressionRE = regexp.MustCompile(`^([0-9]{1,2})([+\-*/])([0-9]{1,2})$`)
+var legacyCaptchaCodeRE = regexp.MustCompile(`^[0-9]{4}$`)
 
 // CaptchaRecognizer is injectable so deployments can provide a specialised
 // OCR implementation while keeping the HTTP flow testable.
 type CaptchaRecognizer func(image.Image) (string, error)
 
-// fetchCaptcha obtains the same four-digit image used by the login page.
+// fetchCaptcha obtains and solves the image challenge used by check-in.
 func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer) (string, error) {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
@@ -76,9 +79,12 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 	if err != nil {
 		return "", err
 	}
-	code = strings.TrimSpace(code)
-	if !captchaCodeRE.MatchString(code) {
-		return "", fmt.Errorf("captcha recognizer returned %q, want four digits", code)
+	code, err = solveCaptcha(code)
+	if err != nil {
+		return "", err
+	}
+	if !captchaAnswerRE.MatchString(code) {
+		return "", fmt.Errorf("captcha answer %q is invalid", code)
 	}
 	return code, nil
 }
@@ -106,7 +112,7 @@ func recognizeCaptcha(img image.Image) (string, error) {
 		opts.ModelDir = modelDir
 		captchaOCR, captchaOCRErr = ddddocr.New(opts)
 		if captchaOCRErr == nil {
-			captchaOCR.SetRanges(ddddocr.RangeDigit)
+			captchaOCR.SetRanges("0123456789+-xX*/=×÷")
 		}
 	})
 	if captchaOCRErr != nil {
@@ -119,4 +125,33 @@ func recognizeCaptcha(img image.Image) (string, error) {
 		return "", fmt.Errorf("recognize captcha: %w", err)
 	}
 	return strings.TrimSpace(result), nil
+}
+
+func solveCaptcha(raw string) (string, error) {
+	expression := strings.NewReplacer(" ", "", "×", "*", "x", "*", "X", "*", "÷", "/", "?", "").Replace(strings.TrimSpace(raw))
+	expression = strings.TrimSuffix(expression, "=")
+	if legacyCaptchaCodeRE.MatchString(expression) {
+		return expression, nil
+	}
+	match := captchaExpressionRE.FindStringSubmatch(expression)
+	if len(match) != 4 {
+		return "", fmt.Errorf("captcha recognizer returned %q, want four digits or a simple arithmetic expression", raw)
+	}
+	left, _ := strconv.Atoi(match[1])
+	right, _ := strconv.Atoi(match[3])
+	var answer int
+	switch match[2] {
+	case "+":
+		answer = left + right
+	case "-":
+		answer = left - right
+	case "*":
+		answer = left * right
+	case "/":
+		if right == 0 || left%right != 0 {
+			return "", fmt.Errorf("captcha expression %q does not have an integer result", raw)
+		}
+		answer = left / right
+	}
+	return strconv.Itoa(answer), nil
 }
