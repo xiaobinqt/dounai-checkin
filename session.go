@@ -109,13 +109,6 @@ func (s *Session) newRequest(ctx context.Context, method, path string) (*http.Re
 		req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
 		req.Header.Set("Referer", s.baseURL+"/user/panel")
 		req.Header.Set("X-Requested-With", "XMLHttpRequest")
-		req.Header.Set("Priority", "u=1, i")
-		req.Header.Set("Sec-CH-UA", `"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"`)
-		req.Header.Set("Sec-CH-UA-Mobile", "?0")
-		req.Header.Set("Sec-CH-UA-Platform", `"Linux"`)
-		req.Header.Set("Sec-Fetch-Dest", "empty")
-		req.Header.Set("Sec-Fetch-Mode", "cors")
-		req.Header.Set("Sec-Fetch-Site", "same-origin")
 		if method == http.MethodPost && requestPath == "/user/checkin" {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 			req.Header.Set("Origin", s.baseURL)

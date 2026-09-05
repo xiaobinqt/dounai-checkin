@@ -32,8 +32,13 @@ func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 		if r.Header.Get("Accept") != "application/json, text/javascript, */*; q=0.01" || r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
 			t.Errorf("captcha AJAX headers are incomplete: %v", r.Header)
 		}
-		if r.Referer() != server.URL+"/user/panel" || r.Header.Get("Sec-Fetch-Site") != "same-origin" || r.Header.Get("Priority") != "u=1, i" {
+		if r.Referer() != server.URL+"/user/panel" || r.UserAgent() != browserUserAgent || r.Header.Get("Accept-Language") == "" {
 			t.Errorf("captcha browser headers are incomplete: %v", r.Header)
+		}
+		for _, name := range []string{"Priority", "Sec-CH-UA", "Sec-CH-UA-Mobile", "Sec-CH-UA-Platform", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site"} {
+			if r.Header.Get(name) != "" {
+				t.Errorf("captcha header %s should not be set", name)
+			}
 		}
 		assertCookie(t, r, "key", "value")
 		w.Header().Set("Content-Type", "application/json")

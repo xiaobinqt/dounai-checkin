@@ -12,6 +12,10 @@ func TestSolveCaptcha(t *testing.T) {
 		"8÷2=":  "4",
 		"玖-伍=":  "4",
 		"陆乘柒=":  "42",
+		"6÷陆=":  "1",
+		"６／叁＝":  "2",
+		"柒✕八=":  "56",
+		"玖－四？":  "5",
 	}
 	for input, want := range tests {
 		got, err := solveCaptcha(input)
