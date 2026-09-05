@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -105,6 +106,7 @@ func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool
 }
 
 func logCheckInDiagnostics(session *Session) {
+	_, _ = fmt.Fprintln(logrus.StandardLogger().Out)
 	logrus.Error("========== check-in diagnostics begin ==========")
 	logrus.Errorf("1. captcha request URL: %s", diagnosticValueForLog(session.lastCaptchaRequestURL, "<request not completed>"))
 	logrus.Errorf("2. captcha raw response body: %s", responseBodyForLog(session.lastCaptchaResponseBody))
@@ -112,6 +114,7 @@ func logCheckInDiagnostics(session *Session) {
 	logrus.Errorf("4. captcha_code sent to /user/checkin: %s", diagnosticValueForLog(session.lastCaptchaCode, "<not submitted>"))
 	logrus.Errorf("5. check-in raw response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
 	logrus.Error("========== check-in diagnostics end ============")
+	_, _ = fmt.Fprintln(logrus.StandardLogger().Out)
 }
 
 func diagnosticValueForLog(value, empty string) string {
@@ -122,8 +125,21 @@ func diagnosticValueForLog(value, empty string) string {
 }
 
 func responseBodyForLog(body string) string {
-	if strings.TrimSpace(body) == "" {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
 		return "<not received>"
+	}
+
+	// The service may encode all Chinese text as JSON \uXXXX sequences. Decode
+	// and encode it again for readable diagnostics while retaining valid JSON.
+	var value any
+	if err := json.Unmarshal([]byte(trimmed), &value); err == nil {
+		var normalized strings.Builder
+		encoder := json.NewEncoder(&normalized)
+		encoder.SetEscapeHTML(false)
+		if err := encoder.Encode(value); err == nil {
+			return strings.TrimSpace(normalized.String())
+		}
 	}
 	return body
 }

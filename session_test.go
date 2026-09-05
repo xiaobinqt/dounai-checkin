@@ -23,6 +23,19 @@ func TestNewSessionRequiresHTTPS(t *testing.T) {
 	}
 }
 
+func TestResponseBodyForLogDecodesEscapedUnicode(t *testing.T) {
+	input := `{"ret":0,"msg":"\u68c0\u6d4b\u5230\u7b7e\u5230\u811a\u672c","svg":"<svg><text>\u9646</text></svg>"}`
+	got := responseBodyForLog(input)
+	for _, want := range []string{"检测到签到脚本", "<svg><text>陆</text></svg>"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("responseBodyForLog() = %q, want %q", got, want)
+		}
+	}
+	if strings.Contains(got, `\u68c0`) {
+		t.Fatalf("responseBodyForLog() kept escaped Chinese: %q", got)
+	}
+}
+
 func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
