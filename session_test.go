@@ -60,6 +60,33 @@ func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 	}
 }
 
+func TestSessionCaptchaErrorIncludesDiagnosticsWithoutCookieValues(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ret":0,"msg":"验证码会话初始化失败","detail":"missing session"}`))
+	}))
+	defer server.Close()
+
+	const secret = "private-cookie-value"
+	session, err := NewSession(server.URL, "uid=123; key="+secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.client = server.Client()
+	_, err = session.fetchCaptcha(context.Background(), nil)
+	if err == nil {
+		t.Fatal("fetchCaptcha() error = nil")
+	}
+	for _, want := range []string{"status=200 OK", "ret=0", `msg="验证码会话初始化失败"`, "cookie_names=[key uid]", "missing session"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("fetchCaptcha() error = %q, want %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatal("fetchCaptcha() error leaked a cookie value")
+	}
+}
+
 func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

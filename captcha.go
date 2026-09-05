@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,22 +45,23 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", sessionHTTPError(resp)
-	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
 		return "", fmt.Errorf("read captcha response: %w", err)
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", s.captchaResponseError(resp, body, 0, "")
+	}
 	var result struct {
 		Ret int    `json:"ret"`
+		Msg string `json:"msg"`
 		SVG string `json:"svg"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("decode captcha response: %w", err)
+		return "", fmt.Errorf("decode captcha response: %w; %v", err, s.captchaResponseError(resp, body, 0, ""))
 	}
 	if result.Ret != 1 || strings.TrimSpace(result.SVG) == "" {
-		return "", fmt.Errorf("captcha endpoint returned ret=%d", result.Ret)
+		return "", s.captchaResponseError(resp, body, result.Ret, result.Msg)
 	}
 	code, isSVG, err := extractSVGCaptchaText(result.SVG)
 	if err != nil {
@@ -94,6 +96,23 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 		return "", fmt.Errorf("captcha answer %q is invalid", code)
 	}
 	return code, nil
+}
+
+func (s *Session) captchaResponseError(resp *http.Response, body []byte, ret int, message string) error {
+	cookieNames := make([]string, 0, len(s.cookies))
+	for name := range s.cookies {
+		cookieNames = append(cookieNames, name)
+	}
+	sort.Strings(cookieNames)
+	summary := strings.Join(strings.Fields(strings.TrimSpace(string(body))), " ")
+	runes := []rune(summary)
+	if len(runes) > 512 {
+		summary = string(runes[:512]) + "…"
+	}
+	return fmt.Errorf(
+		"captcha endpoint rejected request: url=%s/auth/captcha?type=checkin, status=%s, content_type=%q, ret=%d, msg=%q, cookie_names=%v, response=%q",
+		s.baseURL, resp.Status, resp.Header.Get("Content-Type"), ret, strings.TrimSpace(message), cookieNames, summary,
+	)
 }
 
 func extractSVGCaptchaText(markup string) (string, bool, error) {
