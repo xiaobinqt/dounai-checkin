@@ -8,9 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Rican7/retry"
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 )
@@ -83,31 +80,20 @@ func (s *Session) loadAuthenticatedPage(ctx context.Context, path string) (bool,
 }
 
 func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool, err error) {
-	action := func(attempt uint) error {
-		// Match the browser flow: load the panel that owns the check-in button
-		// immediately before its AJAX request.
-		refreshed, refreshErr := session.PrepareCheckIn(ctx)
-		changed = changed || refreshed
-		if refreshErr != nil {
-			msg = ""
-			err = refreshErr
-			logrus.Errorf("refresh user panel before check-in attempt %d failed: %v", attempt+1, err)
-			return err
-		}
-
-		var attemptChanged bool
-		msg, attemptChanged, err = session.CheckIn(ctx)
-		changed = changed || attemptChanged
-		if err != nil {
-			logrus.Errorf("check-in attempt %d failed: %v", attempt+1, err)
-		}
-		return err
+	// Match the browser flow once: load the panel immediately before its AJAX
+	// request. Any failure is returned without another automatic attempt.
+	refreshed, err := session.PrepareCheckIn(ctx)
+	changed = changed || refreshed
+	if err != nil {
+		logrus.Errorf("refresh user panel before check-in failed: %v", err)
+		return "", changed, err
 	}
-	err = retry.Retry(
-		action,
-		strategy.Limit(3),
-		strategy.Backoff(backoff.Fibonacci(8*time.Second)),
-	)
+	var checkInChanged bool
+	msg, checkInChanged, err = session.CheckIn(ctx)
+	changed = changed || checkInChanged
+	if err != nil {
+		logrus.Errorf("check-in failed: %v", err)
+	}
 	return msg, changed, err
 }
 

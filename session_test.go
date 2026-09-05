@@ -190,6 +190,39 @@ func TestTryCheckInRefreshesUserPanelBeforePosting(t *testing.T) {
 	}
 }
 
+func TestTryCheckInDoesNotRetryAfterFailure(t *testing.T) {
+	checkInRequests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/user/panel":
+			_, _ = w.Write([]byte("user panel"))
+		case "/auth/captcha":
+			writeTestCaptcha(w)
+		case "/user/checkin":
+			checkInRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ret":0,"msg":"验证码错误，还剩2次机会"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	session, err := NewSession(server.URL, "key=value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.client = server.Client()
+	session.captchaRecognizer = testCaptchaRecognizer
+	_, _, err = tryCheckIn(context.Background(), session)
+	if err == nil {
+		t.Fatal("tryCheckIn() error = nil")
+	}
+	if checkInRequests != 1 {
+		t.Fatalf("check-in requests = %d, want 1", checkInRequests)
+	}
+}
+
 func TestSessionCheckInRejectsRetryMessage(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/auth/captcha" {
