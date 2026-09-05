@@ -10,7 +10,7 @@
 - 优先直接读取 SVG 的 `<text>` 内容，支持阿拉伯数字、中文大小写数字、全角字符以及加减乘除；旧版 Base64 PNG 继续通过 `go-ddddocr` 识别。
 - Go 版本升级到 1.25；PNG 识别需要 `go-ddddocr` 模型和 ONNX Runtime 1.23.2。
 - 每次任务只尝试签到一次。签到失败后程序立即退出，当天也不再安排自动补偿签到；仍可在 Actions 页面手动运行 `checkin`。
-- 验证码或签到失败时记录两个接口的完整 response body，便于排查；日志不会包含 Cookie 值。
+- 验证码或签到失败时，按请求顺序记录验证码 URL、验证码完整 response body、提取出的算式或字符、提交的 `captcha_code` 以及签到完整 response body；日志不会包含 Cookie 值。
 - 请求保留 Cookie、User-Agent、Accept、Accept-Language、Referer、Origin、Content-Type 和 X-Requested-With，不再伪造 `Sec-CH-UA*`、`Sec-Fetch-*`、`Priority`。
 
 ### 需要操作：同步私有 Runner 工作流

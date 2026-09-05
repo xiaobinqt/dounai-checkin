@@ -37,7 +37,10 @@ type CaptchaRecognizer func(image.Image) (string, error)
 
 // fetchCaptcha obtains and solves the image challenge used by check-in.
 func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer) (string, error) {
+	s.lastCaptchaRequestURL = ""
 	s.lastCaptchaResponseBody = ""
+	s.lastCaptchaRawText = ""
+	s.lastCaptchaCode = ""
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	query := url.Values{"type": {"checkin"}, "_": {fmt.Sprintf("%d-%x", time.Now().UnixNano(), b)}}
@@ -46,6 +49,9 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.Request != nil && resp.Request.URL != nil {
+		s.lastCaptchaRequestURL = resp.Request.URL.String()
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
 		return "", fmt.Errorf("read captcha response: %w", err)
@@ -90,6 +96,7 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 			return "", err
 		}
 	}
+	s.lastCaptchaRawText = code
 	code, err = solveCaptcha(code)
 	if err != nil {
 		return "", err
@@ -97,6 +104,7 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 	if !captchaAnswerRE.MatchString(code) {
 		return "", fmt.Errorf("captcha answer %q is invalid", code)
 	}
+	s.lastCaptchaCode = code
 	return code, nil
 }
 
@@ -111,9 +119,13 @@ func (s *Session) captchaResponseError(resp *http.Response, body []byte, ret int
 	if len(runes) > 512 {
 		summary = string(runes[:512]) + "…"
 	}
+	requestURL := s.baseURL + "/auth/captcha?type=checkin"
+	if resp.Request != nil && resp.Request.URL != nil {
+		requestURL = resp.Request.URL.String()
+	}
 	return fmt.Errorf(
-		"captcha endpoint rejected request: url=%s/auth/captcha?type=checkin, status=%s, content_type=%q, ret=%d, msg=%q, cookie_names=%v, response=%q",
-		s.baseURL, resp.Status, resp.Header.Get("Content-Type"), ret, strings.TrimSpace(message), cookieNames, summary,
+		"captcha endpoint rejected request: url=%s, status=%s, content_type=%q, ret=%d, msg=%q, cookie_names=%v, response=%q",
+		requestURL, resp.Status, resp.Header.Get("Content-Type"), ret, strings.TrimSpace(message), cookieNames, summary,
 	)
 }
 

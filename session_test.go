@@ -58,6 +58,15 @@ func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 	if answer != "4" {
 		t.Fatalf("fetchCaptcha() = %q, want 4", answer)
 	}
+	if session.lastCaptchaRawText != "玖-伍=" {
+		t.Fatalf("captcha extracted text = %q, want 玖-伍=", session.lastCaptchaRawText)
+	}
+	if session.lastCaptchaCode != "4" {
+		t.Fatalf("captcha code = %q, want 4", session.lastCaptchaCode)
+	}
+	if !strings.Contains(session.lastCaptchaRequestURL, "/auth/captcha?_") || !strings.Contains(session.lastCaptchaRequestURL, "type=checkin") {
+		t.Fatalf("captcha request URL = %q", session.lastCaptchaRequestURL)
+	}
 }
 
 func TestSessionCaptchaErrorIncludesDiagnosticsWithoutCookieValues(t *testing.T) {
@@ -84,6 +93,15 @@ func TestSessionCaptchaErrorIncludesDiagnosticsWithoutCookieValues(t *testing.T)
 	}
 	if strings.Contains(err.Error(), secret) {
 		t.Fatal("fetchCaptcha() error leaked a cookie value")
+	}
+	if session.lastCaptchaRequestURL == "" {
+		t.Fatal("captcha request URL was not retained for diagnostics")
+	}
+	if !strings.Contains(session.lastCaptchaResponseBody, `"ret":0`) {
+		t.Fatalf("captcha response body = %q", session.lastCaptchaResponseBody)
+	}
+	if session.lastCaptchaRawText != "" || session.lastCaptchaCode != "" {
+		t.Fatalf("rejected captcha diagnostics = raw %q, code %q; want both empty", session.lastCaptchaRawText, session.lastCaptchaCode)
 	}
 }
 
@@ -226,6 +244,9 @@ func TestTryCheckInDoesNotRetryAfterFailure(t *testing.T) {
 	}
 	if !strings.Contains(session.lastCheckInResponseBody, "验证码错误，还剩2次机会") {
 		t.Fatalf("check-in response body = %q", session.lastCheckInResponseBody)
+	}
+	if session.lastCaptchaRawText != "1234" || session.lastCaptchaCode != "1234" {
+		t.Fatalf("captcha diagnostics = raw %q, code %q; want raw 1234, code 1234", session.lastCaptchaRawText, session.lastCaptchaCode)
 	}
 }
 

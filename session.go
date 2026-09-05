@@ -28,7 +28,10 @@ type Session struct {
 	cookieOutput      string
 	captchaRecognizer CaptchaRecognizer
 
+	lastCaptchaRequestURL   string
 	lastCaptchaResponseBody string
+	lastCaptchaRawText      string
+	lastCaptchaCode         string
 	lastCheckInResponseBody string
 }
 

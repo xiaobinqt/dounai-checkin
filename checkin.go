@@ -15,7 +15,10 @@ import (
 const keepAliveInterval = 3 * time.Hour
 
 func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
+	s.lastCaptchaRequestURL = ""
 	s.lastCaptchaResponseBody = ""
+	s.lastCaptchaRawText = ""
+	s.lastCaptchaCode = ""
 	s.lastCheckInResponseBody = ""
 	code, err := s.fetchCaptcha(ctx, s.captchaRecognizer)
 	if err != nil {
@@ -96,10 +99,26 @@ func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool
 	changed = changed || checkInChanged
 	if err != nil {
 		logrus.Errorf("check-in failed: %v", err)
-		logrus.Errorf("captcha response body: %s", responseBodyForLog(session.lastCaptchaResponseBody))
-		logrus.Errorf("check-in response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
+		logCheckInDiagnostics(session)
 	}
 	return msg, changed, err
+}
+
+func logCheckInDiagnostics(session *Session) {
+	logrus.Error("========== check-in diagnostics begin ==========")
+	logrus.Errorf("1. captcha request URL: %s", diagnosticValueForLog(session.lastCaptchaRequestURL, "<request not completed>"))
+	logrus.Errorf("2. captcha raw response body: %s", responseBodyForLog(session.lastCaptchaResponseBody))
+	logrus.Errorf("3. captcha extracted text/expression: %s", diagnosticValueForLog(session.lastCaptchaRawText, "<not extracted>"))
+	logrus.Errorf("4. captcha_code sent to /user/checkin: %s", diagnosticValueForLog(session.lastCaptchaCode, "<not submitted>"))
+	logrus.Errorf("5. check-in raw response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
+	logrus.Error("========== check-in diagnostics end ============")
+}
+
+func diagnosticValueForLog(value, empty string) string {
+	if strings.TrimSpace(value) == "" {
+		return empty
+	}
+	return value
 }
 
 func responseBodyForLog(body string) string {
