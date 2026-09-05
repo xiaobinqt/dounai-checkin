@@ -15,6 +15,8 @@ import (
 const keepAliveInterval = 3 * time.Hour
 
 func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
+	s.lastCaptchaResponseBody = ""
+	s.lastCheckInResponseBody = ""
 	code, err := s.fetchCaptcha(ctx, s.captchaRecognizer)
 	if err != nil {
 		return "", false, err
@@ -26,12 +28,13 @@ func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", changed, sessionHTTPError(resp)
-	}
 	body, err := readResponseBody(resp)
 	if err != nil {
 		return "", changed, err
+	}
+	s.lastCheckInResponseBody = string(body)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", changed, sessionHTTPError(resp)
 	}
 	if looksLikeLoginPage(body) {
 		return "", changed, expiredSessionError(resp.Status)
@@ -93,8 +96,17 @@ func tryCheckIn(ctx context.Context, session *Session) (msg string, changed bool
 	changed = changed || checkInChanged
 	if err != nil {
 		logrus.Errorf("check-in failed: %v", err)
+		logrus.Errorf("captcha response body: %s", responseBodyForLog(session.lastCaptchaResponseBody))
+		logrus.Errorf("check-in response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
 	}
 	return msg, changed, err
+}
+
+func responseBodyForLog(body string) string {
+	if strings.TrimSpace(body) == "" {
+		return "<not received>"
+	}
+	return body
 }
 
 func CheckInOnce(ctx context.Context, cookieHeader string) (string, bool, error) {

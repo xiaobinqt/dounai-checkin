@@ -27,6 +27,9 @@ type Session struct {
 
 	cookieOutput      string
 	captchaRecognizer CaptchaRecognizer
+
+	lastCaptchaResponseBody string
+	lastCheckInResponseBody string
 }
 
 // SetCookieOutput configures an optional file that receives the complete

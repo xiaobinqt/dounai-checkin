@@ -37,6 +37,7 @@ type CaptchaRecognizer func(image.Image) (string, error)
 
 // fetchCaptcha obtains and solves the image challenge used by check-in.
 func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer) (string, error) {
+	s.lastCaptchaResponseBody = ""
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	query := url.Values{"type": {"checkin"}, "_": {fmt.Sprintf("%d-%x", time.Now().UnixNano(), b)}}
@@ -49,6 +50,7 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 	if err != nil {
 		return "", fmt.Errorf("read captcha response: %w", err)
 	}
+	s.lastCaptchaResponseBody = string(body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", s.captchaResponseError(resp, body, 0, "")
 	}

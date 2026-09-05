@@ -221,6 +221,12 @@ func TestTryCheckInDoesNotRetryAfterFailure(t *testing.T) {
 	if checkInRequests != 1 {
 		t.Fatalf("check-in requests = %d, want 1", checkInRequests)
 	}
+	if !strings.Contains(session.lastCaptchaResponseBody, `"ret":1`) {
+		t.Fatalf("captcha response body = %q", session.lastCaptchaResponseBody)
+	}
+	if !strings.Contains(session.lastCheckInResponseBody, "验证码错误，还剩2次机会") {
+		t.Fatalf("check-in response body = %q", session.lastCheckInResponseBody)
+	}
 }
 
 func TestSessionCheckInRejectsRetryMessage(t *testing.T) {
