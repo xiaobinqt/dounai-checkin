@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"image"
 	"image/png"
@@ -37,7 +38,7 @@ type CaptchaRecognizer func(image.Image) (string, error)
 func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer) (string, error) {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
-	query := url.Values{"_": {fmt.Sprintf("%d-%x", time.Now().UnixNano(), b)}}
+	query := url.Values{"type": {"checkin"}, "_": {fmt.Sprintf("%d-%x", time.Now().UnixNano(), b)}}
 	resp, _, err := s.do(ctx, http.MethodGet, "/auth/captcha?"+query.Encode())
 	if err != nil {
 		return "", err
@@ -60,24 +61,30 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 	if result.Ret != 1 || strings.TrimSpace(result.SVG) == "" {
 		return "", fmt.Errorf("captcha endpoint returned ret=%d", result.Ret)
 	}
-	match := captchaDataRE.FindStringSubmatch(result.SVG)
-	if len(match) != 2 {
-		return "", fmt.Errorf("captcha response does not contain a PNG image")
-	}
-	pngData, err := base64.StdEncoding.DecodeString(match[1])
-	if err != nil {
-		return "", fmt.Errorf("decode captcha image: %w", err)
-	}
-	img, err := png.Decode(bytes.NewReader(pngData))
-	if err != nil {
-		return "", fmt.Errorf("decode captcha PNG: %w", err)
-	}
-	if recognize == nil {
-		recognize = recognizeCaptcha
-	}
-	code, err := recognize(img)
+	code, isSVG, err := extractSVGCaptchaText(result.SVG)
 	if err != nil {
 		return "", err
+	}
+	if !isSVG {
+		match := captchaDataRE.FindStringSubmatch(result.SVG)
+		if len(match) != 2 {
+			return "", fmt.Errorf("captcha response contains neither SVG text nor a PNG image")
+		}
+		pngData, decodeErr := base64.StdEncoding.DecodeString(match[1])
+		if decodeErr != nil {
+			return "", fmt.Errorf("decode captcha image: %w", decodeErr)
+		}
+		img, decodeErr := png.Decode(bytes.NewReader(pngData))
+		if decodeErr != nil {
+			return "", fmt.Errorf("decode captcha PNG: %w", decodeErr)
+		}
+		if recognize == nil {
+			recognize = recognizeCaptcha
+		}
+		code, err = recognize(img)
+		if err != nil {
+			return "", err
+		}
 	}
 	code, err = solveCaptcha(code)
 	if err != nil {
@@ -87,6 +94,40 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 		return "", fmt.Errorf("captcha answer %q is invalid", code)
 	}
 	return code, nil
+}
+
+func extractSVGCaptchaText(markup string) (string, bool, error) {
+	if !strings.Contains(strings.ToLower(markup), "<svg") {
+		return "", false, nil
+	}
+	decoder := xml.NewDecoder(strings.NewReader(markup))
+	var text strings.Builder
+	inText := false
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", true, fmt.Errorf("decode captcha SVG: %w", err)
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			inText = value.Name.Local == "text"
+		case xml.EndElement:
+			if value.Name.Local == "text" {
+				inText = false
+			}
+		case xml.CharData:
+			if inText {
+				text.Write(value)
+			}
+		}
+	}
+	if text.Len() == 0 {
+		return "", true, fmt.Errorf("captcha SVG does not contain text")
+	}
+	return text.String(), true, nil
 }
 
 var (
@@ -128,7 +169,14 @@ func recognizeCaptcha(img image.Image) (string, error) {
 }
 
 func solveCaptcha(raw string) (string, error) {
-	expression := strings.NewReplacer(" ", "", "×", "*", "x", "*", "X", "*", "÷", "/", "?", "").Replace(strings.TrimSpace(raw))
+	expression := strings.NewReplacer(
+		" ", "", "×", "*", "x", "*", "X", "*", "乘", "*",
+		"÷", "/", "除", "/", "加", "+", "减", "-", "?", "",
+		"零", "0", "〇", "0", "一", "1", "壹", "1", "二", "2", "两", "2", "贰", "2",
+		"三", "3", "叁", "3", "四", "4", "肆", "4", "五", "5", "伍", "5",
+		"六", "6", "陆", "6", "七", "7", "柒", "7", "八", "8", "捌", "8",
+		"九", "9", "玖", "9",
+	).Replace(strings.TrimSpace(raw))
 	expression = strings.TrimSuffix(expression, "=")
 	if legacyCaptchaCodeRE.MatchString(expression) {
 		return expression, nil

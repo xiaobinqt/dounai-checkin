@@ -23,6 +23,38 @@ func TestNewSessionRequiresHTTPS(t *testing.T) {
 	}
 }
 
+func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/captcha" || r.URL.Query().Get("type") != "checkin" || r.URL.Query().Get("_") == "" {
+			t.Errorf("captcha URL = %q", r.URL.String())
+		}
+		if r.Header.Get("Accept") != "application/json, text/javascript, */*; q=0.01" || r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
+			t.Errorf("captcha AJAX headers are incomplete: %v", r.Header)
+		}
+		if r.Referer() != server.URL+"/user/panel" || r.Header.Get("Sec-Fetch-Site") != "same-origin" || r.Header.Get("Priority") != "u=1, i" {
+			t.Errorf("captcha browser headers are incomplete: %v", r.Header)
+		}
+		assertCookie(t, r, "key", "value")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ret":1,"svg":"<svg><text>玖</text><text>-</text><text>伍</text><text>=</text></svg>"}`))
+	}))
+	defer server.Close()
+
+	session, err := NewSession(server.URL, "key=value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.client = server.Client()
+	answer, err := session.fetchCaptcha(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer != "4" {
+		t.Fatalf("fetchCaptcha() = %q, want 4", answer)
+	}
+}
+
 func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

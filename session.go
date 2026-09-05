@@ -16,7 +16,7 @@ import (
 
 const maxResponseBody = 2 << 20
 
-const browserUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+const browserUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
 
 // Session stores the cookies obtained after a manual, captcha-protected login.
 // Cookie values are never included in logs or error messages.
@@ -102,14 +102,24 @@ func (s *Session) newRequest(ctx context.Context, method, path string) (*http.Re
 		req.AddCookie(s.cookies[name])
 	}
 	req.Header.Set("User-Agent", browserUserAgent)
-	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-	if method == http.MethodPost && path == "/user/checkin" {
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7")
+	requestPath := req.URL.Path
+	if requestPath == "/user/checkin" || requestPath == "/auth/captcha" {
 		// Match the jQuery request made by the check-in button on /user/panel.
 		req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-		req.Header.Set("Origin", s.baseURL)
 		req.Header.Set("Referer", s.baseURL+"/user/panel")
 		req.Header.Set("X-Requested-With", "XMLHttpRequest")
+		req.Header.Set("Priority", "u=1, i")
+		req.Header.Set("Sec-CH-UA", `"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"`)
+		req.Header.Set("Sec-CH-UA-Mobile", "?0")
+		req.Header.Set("Sec-CH-UA-Platform", `"Linux"`)
+		req.Header.Set("Sec-Fetch-Dest", "empty")
+		req.Header.Set("Sec-Fetch-Mode", "cors")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		if method == http.MethodPost && requestPath == "/user/checkin" {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+			req.Header.Set("Origin", s.baseURL)
+		}
 	} else {
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	}
