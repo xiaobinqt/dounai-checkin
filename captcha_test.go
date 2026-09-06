@@ -2,6 +2,14 @@ package main
 
 import "testing"
 
+func TestCheckInTokenMatchesBrowser(t *testing.T) {
+	const challenge = "1788660657.b09b14464c0edad9.5426597ac25f9c1857ae0fe2b20ebfaebe4a7120ed2f767e4539643d71a02dea"
+	const want = "ddd46b3ad96cfb22da5146dbcdc6b21d87e825c5331875f294f441076b9aeb63"
+	if got := checkInToken(challenge, "2"); got != want {
+		t.Fatalf("checkInToken() = %q, want %q", got, want)
+	}
+}
+
 func TestSolveCaptcha(t *testing.T) {
 	tests := map[string]string{
 		"6935":  "6935",

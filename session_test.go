@@ -42,6 +42,9 @@ func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 		if r.URL.Path != "/auth/captcha" || r.URL.Query().Get("type") != "checkin" || r.URL.Query().Get("_") == "" {
 			t.Errorf("captcha URL = %q", r.URL.String())
 		}
+		if strings.Contains(r.URL.Query().Get("_"), "-") {
+			t.Errorf("captcha cache-buster = %q, want decimal digits", r.URL.Query().Get("_"))
+		}
 		if r.Header.Get("Accept") != "application/json, text/javascript, */*; q=0.01" || r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
 			t.Errorf("captcha AJAX headers are incomplete: %v", r.Header)
 		}
@@ -55,7 +58,7 @@ func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 		}
 		assertCookie(t, r, "key", "value")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ret":1,"svg":"<svg><text>玖</text><text>-</text><text>伍</text><text>=</text></svg>"}`))
+		_, _ = w.Write([]byte(`{"ret":1,"svg":"<svg><text>玖</text><text>-</text><text>伍</text><text>=</text></svg>","challenge":"test-challenge"}`))
 	}))
 	defer server.Close()
 
@@ -77,7 +80,10 @@ func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 	if session.lastCaptchaCode != "4" {
 		t.Fatalf("captcha code = %q, want 4", session.lastCaptchaCode)
 	}
-	if !strings.Contains(session.lastCaptchaRequestURL, "/auth/captcha?_") || !strings.Contains(session.lastCaptchaRequestURL, "type=checkin") {
+	if session.lastCaptchaChallenge != "test-challenge" {
+		t.Fatalf("captcha challenge = %q, want test-challenge", session.lastCaptchaChallenge)
+	}
+	if !strings.Contains(session.lastCaptchaRequestURL, "/auth/captcha?type=checkin&_") {
 		t.Fatalf("captcha request URL = %q", session.lastCaptchaRequestURL)
 	}
 }
@@ -144,6 +150,21 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 			}
 			if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded; charset=UTF-8" {
 				t.Errorf("Content-Type = %q", r.Header.Get("Content-Type"))
+			}
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			if got := r.Form.Get("captcha_code"); got != "1234" {
+				t.Errorf("captcha_code = %q, want 1234", got)
+			}
+			if _, exists := r.Form["checkin_secret"]; !exists {
+				t.Error("checkin_secret field is missing")
+			}
+			if got := r.Form.Get("checkin_secret"); got != "" {
+				t.Errorf("checkin_secret = %q, want empty", got)
+			}
+			if got, want := r.Form.Get("checkin_token"), checkInToken(testCaptchaChallenge, "1234"); got != want {
+				t.Errorf("checkin_token = %q, want %q", got, want)
 			}
 			assertCookie(t, r, "key", "new-key")
 			w.Header().Set("Content-Type", "application/json")
@@ -430,7 +451,9 @@ func assertCookie(t *testing.T, r *http.Request, name, want string) {
 
 func writeTestCaptcha(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"ret":1,"svg":"<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\">"}`))
+	_, _ = w.Write([]byte(`{"ret":1,"svg":"<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\">","challenge":"` + testCaptchaChallenge + `"}`))
 }
+
+const testCaptchaChallenge = "1788660657.b09b14464c0edad9.5426597ac25f9c1857ae0fe2b20ebfaebe4a7120ed2f767e4539643d71a02dea"
 
 func testCaptchaRecognizer(image.Image) (string, error) { return "1234", nil }

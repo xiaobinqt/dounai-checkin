@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,12 +21,20 @@ func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
 	s.lastCaptchaResponseBody = ""
 	s.lastCaptchaRawText = ""
 	s.lastCaptchaCode = ""
+	s.lastCaptchaChallenge = ""
+	s.lastCheckInToken = ""
 	s.lastCheckInResponseBody = ""
 	code, err := s.fetchCaptcha(ctx, s.captchaRecognizer)
 	if err != nil {
 		return "", false, err
 	}
-	requestBody := []byte(url.Values{"captcha_code": {code}}.Encode())
+	token := checkInToken(s.lastCaptchaChallenge, code)
+	s.lastCheckInToken = token
+	requestBody := []byte(url.Values{
+		"captcha_code":   {code},
+		"checkin_secret": {""},
+		"checkin_token":  {token},
+	}.Encode())
 	resp, changed, err := s.doRequest(ctx, http.MethodPost, "/user/checkin", requestBody)
 	if err != nil {
 		return "", changed, err
@@ -111,10 +120,20 @@ func logCheckInDiagnostics(session *Session) {
 	logrus.Errorf("1. captcha request URL: %s", diagnosticValueForLog(session.lastCaptchaRequestURL, "<request not completed>"))
 	logrus.Errorf("2. captcha raw response body: %s", responseBodyForLog(session.lastCaptchaResponseBody))
 	logrus.Errorf("3. captcha extracted text/expression: %s", diagnosticValueForLog(session.lastCaptchaRawText, "<not extracted>"))
-	logrus.Errorf("4. captcha_code sent to /user/checkin: %s", diagnosticValueForLog(session.lastCaptchaCode, "<not submitted>"))
-	logrus.Errorf("5. check-in raw response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
+	logrus.Errorf("4. captcha challenge: %s", diagnosticValueForLog(session.lastCaptchaChallenge, "<not received>"))
+	logrus.Errorf("5. captcha_code sent to /user/checkin: %s", diagnosticValueForLog(session.lastCaptchaCode, "<not submitted>"))
+	logrus.Errorf("6. checkin_token sent to /user/checkin: %s", diagnosticValueForLog(session.lastCheckInToken, "<not submitted>"))
+	logrus.Errorf("7. check-in raw response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
 	logrus.Error("========== check-in diagnostics end ============")
 	_, _ = fmt.Fprintln(logrus.StandardLogger().Out)
+}
+
+func checkInToken(challenge, code string) string {
+	if challenge == "" || code == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(challenge + "_" + code + "_dou_2026"))
+	return fmt.Sprintf("%x", sum)
 }
 
 func diagnosticValueForLog(value, empty string) string {

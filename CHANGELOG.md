@@ -7,6 +7,8 @@
 ### 主要变化
 
 - 签到前请求同域 `/auth/captcha?type=checkin&_=随机值`，随后将答案作为 `captcha_code` 提交到 `/user/checkin`。
+- 支持新版 challenge 校验：使用网页相同的 SHA-256 规则生成 `checkin_token`，并保持蜜罐字段 `checkin_secret` 为空；验证码请求的 `_` 参数改为浏览器一致的纯数字格式。
+- 已经同步本节最新版私有 Runner YAML 的用户，无需因 challenge 校验再次修改 YAML 或 Secrets；私有工作流会在运行时拉取最新公开源码。
 - 优先直接读取 SVG 的 `<text>` 内容，支持阿拉伯数字、中文大小写数字、全角字符以及加减乘除；旧版 Base64 PNG 继续通过 `go-ddddocr` 识别。
 - Go 版本升级到 1.25；PNG 识别需要 `go-ddddocr` 模型和 ONNX Runtime 1.23.2。
 - 每次任务只尝试签到一次。签到失败后程序立即退出，当天也不再安排自动补偿签到；仍可在 Actions 页面手动运行 `checkin`。

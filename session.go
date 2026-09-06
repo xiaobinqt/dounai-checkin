@@ -32,6 +32,8 @@ type Session struct {
 	lastCaptchaResponseBody string
 	lastCaptchaRawText      string
 	lastCaptchaCode         string
+	lastCaptchaChallenge    string
+	lastCheckInToken        string
 	lastCheckInResponseBody string
 }
 

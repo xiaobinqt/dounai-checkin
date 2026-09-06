@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
@@ -12,7 +11,6 @@ import (
 	"image/png"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -41,10 +39,11 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 	s.lastCaptchaResponseBody = ""
 	s.lastCaptchaRawText = ""
 	s.lastCaptchaCode = ""
-	var b [8]byte
-	_, _ = rand.Read(b[:])
-	query := url.Values{"type": {"checkin"}, "_": {fmt.Sprintf("%d-%x", time.Now().UnixNano(), b)}}
-	resp, _, err := s.do(ctx, http.MethodGet, "/auth/captcha?"+query.Encode())
+	s.lastCaptchaChallenge = ""
+	// jQuery's cache:false parameter is a decimal cache-buster. Keep the same
+	// shape instead of using the previous Go-specific timestamp-random format.
+	requestPath := "/auth/captcha?type=checkin&_=" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+	resp, _, err := s.do(ctx, http.MethodGet, requestPath)
 	if err != nil {
 		return "", err
 	}
@@ -61,9 +60,10 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 		return "", s.captchaResponseError(resp, body, 0, "")
 	}
 	var result struct {
-		Ret int    `json:"ret"`
-		Msg string `json:"msg"`
-		SVG string `json:"svg"`
+		Ret       int    `json:"ret"`
+		Msg       string `json:"msg"`
+		SVG       string `json:"svg"`
+		Challenge string `json:"challenge"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("decode captcha response: %w; %v", err, s.captchaResponseError(resp, body, 0, ""))
@@ -71,6 +71,7 @@ func (s *Session) fetchCaptcha(ctx context.Context, recognize CaptchaRecognizer)
 	if result.Ret != 1 || strings.TrimSpace(result.SVG) == "" {
 		return "", s.captchaResponseError(resp, body, result.Ret, result.Msg)
 	}
+	s.lastCaptchaChallenge = strings.TrimSpace(result.Challenge)
 	code, isSVG, err := extractSVGCaptchaText(result.SVG)
 	if err != nil {
 		return "", err
