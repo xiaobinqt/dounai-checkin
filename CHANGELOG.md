@@ -8,12 +8,15 @@
 
 - 签到前请求同域 `/auth/captcha?type=checkin&_=随机值`，随后将答案作为 `captcha_code` 提交到 `/user/checkin`。
 - 支持新版 challenge 校验：使用网页相同的 SHA-256 规则生成 `checkin_token`，并保持蜜罐字段 `checkin_secret` 为空；验证码请求的 `_` 参数改为浏览器一致的纯数字格式。
+- 跟进新版动态盐校验：读取验证码响应中的 `seed` 和 `salt_mask`，结合 challenge nonce 生成动态盐，再计算本次签到的 `checkin_token`；旧版固定盐继续兼容。
+- PNG OCR 字符范围增加中文数字以及“加、减、乘、除”，避免新版图片算式中的中文字符被过滤。
+- 整图 OCR 缺字时，按验证码固定布局分区识别两个操作数和运算符，再组合计算，降低随机颜色和干扰线造成的漏字概率。
+- 对原图及两档高对比度图分别执行整图、分区 OCR；算术验证码至少两条路径得到相同答案才提交，无法达成共识时安全停止。
 - 已经同步本节最新版私有 Runner YAML 的用户，无需因 challenge 校验再次修改 YAML 或 Secrets；私有工作流会在运行时拉取最新公开源码。
 - 优先直接读取 SVG 的 `<text>` 内容，支持阿拉伯数字、中文大小写数字、全角字符以及加减乘除；旧版 Base64 PNG 继续通过 `go-ddddocr` 识别。
 - Go 版本升级到 1.25；PNG 识别需要 `go-ddddocr` 模型和 ONNX Runtime 1.23.2。
 - 每次任务只尝试签到一次。签到失败后程序立即退出，当天也不再安排自动补偿签到；仍可在 Actions 页面手动运行 `checkin`。
 - 验证码或签到失败时，按请求顺序记录验证码 URL、验证码完整 response body、提取出的算式或字符、提交的 `captcha_code` 以及签到完整 response body；JSON 中的 Unicode 转义会显示为可读文字，日志不会包含 Cookie 值。
-- 请求保留 Cookie、User-Agent、Accept、Accept-Language、Referer、Origin、Content-Type 和 X-Requested-With，不再伪造 `Sec-CH-UA*`、`Sec-Fetch-*`、`Priority`。
 
 ### 需要操作：同步私有 Runner 工作流
 

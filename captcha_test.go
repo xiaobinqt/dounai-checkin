@@ -5,7 +5,17 @@ import "testing"
 func TestCheckInTokenMatchesBrowser(t *testing.T) {
 	const challenge = "1788660657.b09b14464c0edad9.5426597ac25f9c1857ae0fe2b20ebfaebe4a7120ed2f767e4539643d71a02dea"
 	const want = "ddd46b3ad96cfb22da5146dbcdc6b21d87e825c5331875f294f441076b9aeb63"
-	if got := checkInToken(challenge, "2"); got != want {
+	if got := checkInToken(challenge, "2", "", ""); got != want {
+		t.Fatalf("checkInToken() = %q, want %q", got, want)
+	}
+}
+
+func TestCheckInTokenMatchesCurrentBrowserAlgorithm(t *testing.T) {
+	const challenge = "1789175492.6284b369fee99f7b.8328e8a18c588a88d2fd8095941d601404fcdb84104409976148b1b46b57ca6f"
+	const seed = "9ee12050a11887197006577b198e7b662326c74ab6a1af359873e5d4b3d69f12"
+	const saltMask = "50e00b83770cab18"
+	const want = "34ce1334c471bcb3617c02ccf5c78586603f397d779a946c3a1c0c7e7088272b"
+	if got := checkInToken(challenge, "2", seed, saltMask); got != want {
 		t.Fatalf("checkInToken() = %q, want %q", got, want)
 	}
 }

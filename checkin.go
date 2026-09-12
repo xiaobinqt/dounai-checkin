@@ -22,13 +22,14 @@ func (s *Session) CheckIn(ctx context.Context) (string, bool, error) {
 	s.lastCaptchaRawText = ""
 	s.lastCaptchaCode = ""
 	s.lastCaptchaChallenge = ""
+	s.lastCaptchaSaltMask = ""
 	s.lastCheckInToken = ""
 	s.lastCheckInResponseBody = ""
 	code, err := s.fetchCaptcha(ctx, s.captchaRecognizer)
 	if err != nil {
 		return "", false, err
 	}
-	token := checkInToken(s.lastCaptchaChallenge, code)
+	token := checkInToken(s.lastCaptchaChallenge, code, s.checkInTokenSeed, s.lastCaptchaSaltMask)
 	s.lastCheckInToken = token
 	requestBody := []byte(url.Values{
 		"captcha_code":   {code},
@@ -121,18 +122,30 @@ func logCheckInDiagnostics(session *Session) {
 	logrus.Errorf("2. captcha raw response body: %s", responseBodyForLog(session.lastCaptchaResponseBody))
 	logrus.Errorf("3. captcha extracted text/expression: %s", diagnosticValueForLog(session.lastCaptchaRawText, "<not extracted>"))
 	logrus.Errorf("4. captcha challenge: %s", diagnosticValueForLog(session.lastCaptchaChallenge, "<not received>"))
-	logrus.Errorf("5. captcha_code sent to /user/checkin: %s", diagnosticValueForLog(session.lastCaptchaCode, "<not submitted>"))
-	logrus.Errorf("6. checkin_token sent to /user/checkin: %s", diagnosticValueForLog(session.lastCheckInToken, "<not submitted>"))
-	logrus.Errorf("7. check-in raw response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
+	logrus.Errorf("5. captcha salt_mask: %s", diagnosticValueForLog(session.lastCaptchaSaltMask, "<not received>"))
+	logrus.Errorf("6. check-in token seed: %s", diagnosticValueForLog(session.checkInTokenSeed, "<not received>"))
+	logrus.Errorf("7. captcha_code sent to /user/checkin: %s", diagnosticValueForLog(session.lastCaptchaCode, "<not submitted>"))
+	logrus.Errorf("8. checkin_token sent to /user/checkin: %s", diagnosticValueForLog(session.lastCheckInToken, "<not submitted>"))
+	logrus.Errorf("9. check-in raw response body: %s", responseBodyForLog(session.lastCheckInResponseBody))
 	logrus.Error("========== check-in diagnostics end ============")
 	_, _ = fmt.Fprintln(logrus.StandardLogger().Out)
 }
 
-func checkInToken(challenge, code string) string {
+func checkInToken(challenge, code, seed, saltMask string) string {
 	if challenge == "" || code == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(challenge + "_" + code + "_dou_2026"))
+	salt := "dou_2026"
+	if seed != "" || saltMask != "" {
+		parts := strings.Split(challenge, ".")
+		nonce := ""
+		if len(parts) >= 2 {
+			nonce = parts[1]
+		}
+		dynamicSalt := sha256.Sum256([]byte(seed + "_" + nonce + "_" + saltMask))
+		salt = fmt.Sprintf("%x", dynamicSalt)
+	}
+	sum := sha256.Sum256([]byte(challenge + "_" + code + "_" + salt))
 	return fmt.Sprintf("%x", sum)
 }
 

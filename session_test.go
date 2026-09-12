@@ -51,9 +51,18 @@ func TestSessionFetchesAndSolvesCheckInSVGChallenge(t *testing.T) {
 		if r.Referer() != server.URL+"/user/panel" || r.UserAgent() != browserUserAgent || r.Header.Get("Accept-Language") == "" {
 			t.Errorf("captcha browser headers are incomplete: %v", r.Header)
 		}
-		for _, name := range []string{"Priority", "Sec-CH-UA", "Sec-CH-UA-Mobile", "Sec-CH-UA-Platform", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site"} {
-			if r.Header.Get(name) != "" {
-				t.Errorf("captcha header %s should not be set", name)
+		wantBrowserHeaders := map[string]string{
+			"Priority":           "u=1, i",
+			"Sec-CH-UA":          browserSecCHUA,
+			"Sec-CH-UA-Mobile":   "?0",
+			"Sec-CH-UA-Platform": `"macOS"`,
+			"Sec-Fetch-Dest":     "empty",
+			"Sec-Fetch-Mode":     "cors",
+			"Sec-Fetch-Site":     "same-origin",
+		}
+		for name, want := range wantBrowserHeaders {
+			if got := r.Header.Get(name); got != want {
+				t.Errorf("captcha header %s = %q, want %q", name, got, want)
 			}
 		}
 		assertCookie(t, r, "key", "value")
@@ -163,7 +172,7 @@ func TestSessionKeepAliveUpdatesCookiesForCheckIn(t *testing.T) {
 			if got := r.Form.Get("checkin_secret"); got != "" {
 				t.Errorf("checkin_secret = %q, want empty", got)
 			}
-			if got, want := r.Form.Get("checkin_token"), checkInToken(testCaptchaChallenge, "1234"); got != want {
+			if got, want := r.Form.Get("checkin_token"), checkInToken(testCaptchaChallenge, "1234", testCaptchaSeed, testCaptchaSaltMask); got != want {
 				t.Errorf("checkin_token = %q, want %q", got, want)
 			}
 			assertCookie(t, r, "key", "new-key")
@@ -451,9 +460,11 @@ func assertCookie(t *testing.T, r *http.Request, name, want string) {
 
 func writeTestCaptcha(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"ret":1,"svg":"<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\">","challenge":"` + testCaptchaChallenge + `"}`))
+	_, _ = w.Write([]byte(`{"ret":1,"svg":"<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\">","challenge":"` + testCaptchaChallenge + `","salt_mask":"` + testCaptchaSaltMask + `","seed":"` + testCaptchaSeed + `"}`))
 }
 
 const testCaptchaChallenge = "1788660657.b09b14464c0edad9.5426597ac25f9c1857ae0fe2b20ebfaebe4a7120ed2f767e4539643d71a02dea"
+const testCaptchaSaltMask = "50e00b83770cab18"
+const testCaptchaSeed = "9ee12050a11887197006577b198e7b662326c74ab6a1af359873e5d4b3d69f12"
 
 func testCaptchaRecognizer(image.Image) (string, error) { return "1234", nil }
