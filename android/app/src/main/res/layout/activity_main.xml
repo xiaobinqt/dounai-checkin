@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="豆奶签到"
+        android:textColor="#1A237E"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/site_url"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="https://你的豆奶站点"
+        android:inputType="textUri"
+        android:singleLine="true" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/open_panel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="打开签到页" />
+
+        <Button
+            android:id="@+id/reload_page"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="刷新" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/settings"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="自动签到设置" />
+
+        <Button
+            android:id="@+id/checkin_now"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="立即签到一次" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="6dp"
+        android:text="填写站点地址后打开签到页；首次使用请在网页中登录。"
+        android:textColor="#424242"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/last_result"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="6dp"
+        android:text="尚无签到记录"
+        android:textSize="13sp" />
+
+    <WebView
+        android:id="@+id/web_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

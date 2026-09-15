@@ -1,10 +1,20 @@
 # dounai-checkin
 
-豆奶 Cookie 签到与登录态保活工具。用户在浏览器中手动完成一次登录，程序复用登录 Cookie，并在签到时识别或计算服务端验证码。
+豆奶每日签到工具。Android APK 在手机本地自动签到；原有 Go 命令行和 GitHub Actions 部署仍可使用。
 
-**升级现有部署前，请先查看 [更新日志与升级说明](CHANGELOG.md)，其中会注明是否需要同步私有 runner 的 YAML 或更新 Secrets。**
+## 手机 APK 签到（推荐）
 
-## 功能
+Android 版在手机上每天自动签到，支持 Bark 和邮件通知。先从 [GitHub Releases](https://github.com/xiaobinqt/dounai-checkin/releases) 下载 APK 安装。首次使用在首页填写豆奶站点的 HTTPS 根地址，点击“打开签到页”，在应用内完成网页登录。应用会把该站点的登录 Cookie 留在手机应用私有数据中，后台任务直接使用它；不要把 Cookie 提交到仓库或发到聊天中。
+
+在“自动签到设置”中勾选每天自动签到，填写北京时间的签到时间（默认 `09:17`），点击“保存并安排每日任务”。可选填写 Bark 设备 Key；邮件通知需填写邮箱地址、SMTP 主机、端口和授权码，支持 `465` 直接 TLS 或 `587` STARTTLS。点击“发送测试通知”可以单独验证通知配置。“立即签到一次”会手动提交一次签到任务，失败不会自动重试。
+
+手机端会先打开 `/user/panel`，获取并解答签到验证码，再提交一次签到请求；支持 SVG 算式和 PNG 图片识别，并接收服务端轮换的 Cookie。APK 集成了 ONNX 模型，详情和本地构建方法见 [Android 工程说明](android/README.md)。Android 后台任务受省电策略、联网状态和系统调度影响，可能晚于设置时间执行；手机关机或长期断网时无法保证当天签到。登录态失效时需要重新在应用内登录。
+
+旧的 GitHub-hosted Runner 方案容易受到数据中心出口 IP 与登录环境差异的影响，当前不推荐作为默认签到方式。下面的 GitHub Actions、命令行和常驻部署说明保留给已有部署。
+
+**升级现有 Go 部署前，请先查看 [更新日志与升级说明](CHANGELOG.md)，其中会注明是否需要同步私有 runner 的 YAML 或更新 Secrets。**
+
+## Go 命令行与旧部署功能
 
 - 每三小时检查并刷新登录态
 - 每天定时签到，也支持手动签到
@@ -14,9 +24,9 @@
 - 自动接收服务端更新的 Cookie，并可安全回写 runner 的 GitHub Secret
 - 支持 GitHub Actions、本地命令和常驻模式
 
-## 工作方式
+## 旧 GitHub Actions 工作方式
 
-推荐使用“公开源码 + 私有 Runner”结构：
+旧部署使用“公开源码 + 私有 Runner”结构：
 
 ```text
 xiaobinqt/dounai-checkin (Public)

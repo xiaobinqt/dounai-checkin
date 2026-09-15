@@ -19,3 +19,8 @@
 /dounai-linux-*
 /dounai
 /dounai-checkin
+/android/.gradle/
+/android/.idea/
+/android/local.properties
+/android/app/build/
+/android/build/

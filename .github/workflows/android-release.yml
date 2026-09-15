@@ -1,0 +1,30 @@
+name: Android APK release
+
+on:
+  push:
+    tags:
+      - 'android-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build signed installable APK
+        working-directory: android
+        run: ./gradlew :app:assembleDebug
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dounai-checkin-${GITHUB_REF_NAME}.apk"
+          gh release create "$GITHUB_REF_NAME" "dounai-checkin-${GITHUB_REF_NAME}.apk" \
+            --title "豆奶签到 Android 1.0.0" \
+            --notes-file android/RELEASE_NOTES.md
