@@ -4,7 +4,7 @@
 
 ## 手机 APK 签到（推荐）
 
-Android 版在手机上每天自动签到，支持 Bark 和邮件通知。先从 [GitHub Releases](https://github.com/xiaobinqt/dounai-checkin/releases) 下载 APK 安装。首次使用在首页填写豆奶站点的 HTTPS 根地址，点击“打开签到页”，在应用内完成网页登录。应用会把该站点的登录 Cookie 留在手机应用私有数据中，后台任务直接使用它；不要把 Cookie 提交到仓库或发到聊天中。
+Android 版在手机上每天自动签到，支持 Bark 和邮件通知。下载并安装 [Android v1.0.0 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.0/dounai-checkin-android-v1.0.0.apk)（[发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.0)）。首次使用在首页填写豆奶站点的 HTTPS 根地址，点击“打开签到页”，在应用内完成网页登录。应用会把该站点的登录 Cookie 留在手机应用私有数据中，后台任务直接使用它；不要把 Cookie 提交到仓库或发到聊天中。
 
 在“自动签到设置”中勾选每天自动签到，填写北京时间的签到时间（默认 `09:17`），点击“保存并安排每日任务”。可选填写 Bark 设备 Key；邮件通知需填写邮箱地址、SMTP 主机、端口和授权码，支持 `465` 直接 TLS 或 `587` STARTTLS。点击“发送测试通知”可以单独验证通知配置。“立即签到一次”会手动提交一次签到任务，失败不会自动重试。
 
