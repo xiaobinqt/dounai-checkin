@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.WindowManager;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -28,6 +29,7 @@ public class SettingsActivity extends Activity {
         form.setPadding(24, 24, 24, 24);
         scroll.addView(form);
         setContentView(scroll);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
 
         TextView title = new TextView(this);
         title.setText("自动签到与通知");
@@ -43,7 +45,8 @@ public class SettingsActivity extends Activity {
         barkServer = field(form, "Bark 服务地址", prefs.getString("bark_server", "https://api.day.app"), InputType.TYPE_TEXT_VARIATION_URI);
         email = field(form, "邮件地址（发件人及收件人，可选）", prefs.getString("email", ""), InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         emailHost = field(form, "SMTP 主机", prefs.getString("email_host", ""), InputType.TYPE_CLASS_TEXT);
-        emailPort = field(form, "SMTP 端口（465 或 587）", Integer.toString(prefs.getInt("email_port", 0)), InputType.TYPE_CLASS_NUMBER);
+        int savedPort = prefs.getInt("email_port", 0);
+        emailPort = field(form, "SMTP 端口（465 或 587）", savedPort == 0 ? "" : Integer.toString(savedPort), InputType.TYPE_CLASS_NUMBER);
         emailPassword = field(form, "SMTP 授权码", prefs.getString("email_auth_code", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
 
         TextView tlsHint = new TextView(this);
