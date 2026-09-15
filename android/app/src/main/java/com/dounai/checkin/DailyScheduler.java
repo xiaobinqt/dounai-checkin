@@ -19,6 +19,7 @@ final class DailyScheduler {
 
     static void schedule(Context context) {
         schedule(context, ExistingWorkPolicy.REPLACE);
+        SessionRefreshScheduler.schedule(context);
     }
 
     static void scheduleNext(Context context) {

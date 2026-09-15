@@ -26,5 +26,5 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk "dounai-checkin-${GITHUB_REF_NAME}.apk"
           gh release create "$GITHUB_REF_NAME" "dounai-checkin-${GITHUB_REF_NAME}.apk" \
-            --title "豆奶签到 Android 1.0.0" \
+            --title "豆奶签到 Android ${GITHUB_REF_NAME#android-v}" \
             --notes-file android/RELEASE_NOTES.md

@@ -83,8 +83,10 @@ public class SettingsActivity extends Activity {
     }
 
     private boolean save() {
-        if (autoEnabled.isChecked() && getSharedPreferences("site", Context.MODE_PRIVATE)
-                .getString("cookie", "").trim().isEmpty()) {
+        SharedPreferences site = getSharedPreferences("site", Context.MODE_PRIVATE);
+        if (autoEnabled.isChecked() && (!site.getBoolean("has_logged_in", false)
+                || site.getBoolean("login_expired", false)
+                || site.getString("cookie", "").trim().isEmpty())) {
             status.setText("请先在首页打开站点并完成网页登录");
             return false;
         }

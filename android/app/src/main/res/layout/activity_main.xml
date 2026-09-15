@@ -5,6 +5,12 @@
     android:orientation="vertical"
     android:padding="12dp">
 
+    <LinearLayout
+        android:id="@+id/app_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -76,6 +82,46 @@
         android:paddingBottom="6dp"
         android:text="尚无签到记录"
         android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/session_result"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="6dp"
+        android:text="登录态：尚未自动刷新"
+        android:textSize="13sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/browser_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/exit_browser"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="返回应用" />
+
+        <TextView
+            android:id="@+id/password_count"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text=""
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/browser_reload"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="刷新网页" />
+    </LinearLayout>
 
     <WebView
         android:id="@+id/web_view"

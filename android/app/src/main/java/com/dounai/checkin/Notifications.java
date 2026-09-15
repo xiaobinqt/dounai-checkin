@@ -48,6 +48,16 @@ final class Notifications {
         return send(context, true, "豆奶签到通知测试");
     }
 
+    static String sendSessionExpired(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
+        try {
+            sendBark(prefs, "豆奶登录已失效", "登录 Cookie 已失效，请在豆奶签到 APK 中重新登录。自动刷新无法恢复已经过期的会话。");
+            return "";
+        } catch (Exception error) {
+            return "Bark：" + error.getMessage();
+        }
+    }
+
     private static void sendBark(SharedPreferences prefs, String title, String body) throws Exception {
         String key = prefs.getString("bark_key", "").trim();
         if (key.isEmpty()) return;

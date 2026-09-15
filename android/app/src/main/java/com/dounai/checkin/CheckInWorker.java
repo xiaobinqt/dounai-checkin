@@ -13,7 +13,7 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public class CheckInWorker extends Worker {
-    private static final Object RUN_LOCK = new Object();
+    static final Object RUN_LOCK = new Object();
 
     public CheckInWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
@@ -31,17 +31,25 @@ public class CheckInWorker extends Worker {
             if (automatic && day.equals(site.getString("last_auto_date", ""))) return Result.success();
             if (automatic) site.edit().putString("last_auto_date", day).commit();
             boolean success = false;
+            boolean expired = false;
             String message;
             try {
                 String url = site.getString("url", "");
                 String cookie = site.getString("cookie", "");
                 if (url.isEmpty()) throw new Exception("请先设置站点地址并登录");
+                if (cookie.isEmpty() && site.getBoolean("has_logged_in", false))
+                    throw new CheckInClient.SessionExpiredException("登录态已失效，请在应用中重新登录");
                 message = new CheckInClient(context, url, cookie).checkIn();
                 success = true;
+            } catch (CheckInClient.SessionExpiredException error) {
+                expired = true;
+                message = error.getMessage();
             } catch (Exception error) {
                 message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
-            String notificationError = Notifications.send(context, success, message);
+            if (success) SessionState.restored(context);
+            String notificationError = expired ? SessionState.expired(context)
+                    : Notifications.send(context, success, message);
             String result = (success ? "成功：" : "失败：") + message;
             if (!notificationError.isEmpty()) result += "；通知失败：" + notificationError;
             site.edit().putString("last_result", result)

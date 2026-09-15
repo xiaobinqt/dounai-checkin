@@ -3,17 +3,23 @@ package com.dounai.checkin;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.inputmethod.InputMethodManager;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.TextView;
+
 
 public class MainActivity extends Activity {
     private static final String PREFS = "site";
@@ -23,7 +29,29 @@ public class MainActivity extends Activity {
     private EditText siteUrl;
     private TextView status;
     private TextView lastResult;
+    private TextView sessionResult;
+    private TextView passwordCount;
     private WebView webView;
+    private View appControls;
+    private View browserControls;
+    private boolean browserMode;
+    private boolean pageRejected;
+    private final Handler countHandler = new Handler(Looper.getMainLooper());
+    private final Runnable countUpdater = new Runnable() {
+        @Override public void run() {
+            if (!browserMode) return;
+            webView.evaluateJavascript("(function(){var p=document.getElementById('passwd');return p?p.value.length:-1;})()", value -> {
+                if (!browserMode) return;
+                try {
+                    int count = Integer.parseInt(value);
+                    passwordCount.setText(count < 0 ? "" : "密码 " + count + " 字符");
+                } catch (NumberFormatException ignored) {
+                    passwordCount.setText("");
+                }
+            });
+            countHandler.postDelayed(this, 1500);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,7 +61,11 @@ public class MainActivity extends Activity {
         siteUrl = findViewById(R.id.site_url);
         status = findViewById(R.id.status);
         lastResult = findViewById(R.id.last_result);
+        sessionResult = findViewById(R.id.session_result);
+        passwordCount = findViewById(R.id.password_count);
         webView = findViewById(R.id.web_view);
+        appControls = findViewById(R.id.app_controls);
+        browserControls = findViewById(R.id.browser_controls);
         siteUrl.setText(getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(URL_KEY, ""));
 
         WebSettings settings = webView.getSettings();
@@ -44,6 +76,11 @@ public class MainActivity extends Activity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         CookieManager.getInstance().setAcceptCookie(true);
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                pageRejected = false;
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
@@ -62,9 +99,25 @@ public class MainActivity extends Activity {
                 String savedUrl = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(URL_KEY, "");
                 if (!savedUrl.isEmpty() && uri.getHost() != null
                         && uri.getHost().equalsIgnoreCase(Uri.parse(savedUrl).getHost())) {
+                    if ("/".equals(uri.getPath()) || uri.getPath() == null || uri.getPath().isEmpty()) {
+                        view.evaluateJavascript("(function(){var p=document.getElementById('passwd');"
+                                + "if(!p||p.dataset.dounaiPasswordInput)return;"
+                                + "p.style.setProperty('-webkit-text-security','disc','important');"
+                                + "if(getComputedStyle(p).webkitTextSecurity!=='disc')return;"
+                                + "p.type='text';p.setAttribute('autocomplete','off');"
+                                + "p.setAttribute('autocorrect','off');p.setAttribute('autocapitalize','off');"
+                                + "p.setAttribute('spellcheck','false');"
+                                + "p.dataset.dounaiPasswordInput='1';})()", null);
+                    }
                     String cookie = CookieManager.getInstance().getCookie(savedUrl);
                     if (cookie != null && !cookie.trim().isEmpty()) {
                         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("cookie", cookie).apply();
+                        if (!pageRejected && uri.getPath() != null && uri.getPath().startsWith("/user")) {
+                            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                                    .putBoolean("has_logged_in", true).apply();
+                            SessionState.restored(MainActivity.this);
+                            SessionRefreshScheduler.schedule(MainActivity.this);
+                        }
                     }
                 }
                 CookieManager.getInstance().flush();
@@ -75,6 +128,20 @@ public class MainActivity extends Activity {
                 if (request.isForMainFrame()) {
                     status.setText("页面加载失败：" + error.getDescription());
                 }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                if (!request.isForMainFrame() || response.getStatusCode() != 401
+                        || !(PANEL_PATH.equals(request.getUrl().getPath())
+                        || "/user".equals(request.getUrl().getPath()))) return;
+                String savedUrl = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(URL_KEY, "");
+                if (savedUrl.isEmpty() || !request.getUrl().getHost().equalsIgnoreCase(Uri.parse(savedUrl).getHost())) return;
+                pageRejected = true;
+                getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("login_expired", true).apply();
+                SessionRefreshScheduler.notifyExpiry(MainActivity.this);
+                status.setText("登录状态已失效；正在打开登录页…");
+                view.post(() -> view.loadUrl(savedUrl + "/"));
             }
         });
 
@@ -88,13 +155,17 @@ public class MainActivity extends Activity {
             if (webView.getUrl() == null) {
                 openPanel();
             } else {
+                setBrowserMode(true);
                 webView.reload();
             }
         });
+        findViewById(R.id.exit_browser).setOnClickListener(v -> setBrowserMode(false));
+        findViewById(R.id.browser_reload).setOnClickListener(v -> webView.reload());
 
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         }
+        setBrowserMode(savedInstanceState != null && savedInstanceState.getBoolean("browser_mode"));
     }
 
     private void openPanel() {
@@ -108,12 +179,34 @@ public class MainActivity extends Activity {
         }
         String baseUrl = "https://" + uri.getEncodedAuthority();
         String previous = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(URL_KEY, "");
+        String cookie = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("cookie", "");
         if (!baseUrl.equals(previous)) {
-            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("cookie").apply();
+            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                    .remove("cookie").putBoolean("has_logged_in", false)
+                    .putBoolean("login_expired", false)
+                    .putBoolean("login_expired_notified", false).apply();
+            cookie = "";
         }
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(URL_KEY, baseUrl).apply();
-        status.setText("正在打开签到页…");
-        webView.loadUrl(baseUrl + PANEL_PATH);
+        boolean loggedIn = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("has_logged_in", false)
+                && !getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("login_expired", false)
+                && !cookie.isEmpty();
+        status.setText(loggedIn ? "正在打开签到页…" : "正在打开登录页…");
+        setBrowserMode(true);
+        webView.loadUrl(baseUrl + (loggedIn ? PANEL_PATH : "/"));
+    }
+
+    private void setBrowserMode(boolean enabled) {
+        if (browserMode && !enabled) {
+            InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            keyboard.hideSoftInputFromWindow(webView.getWindowToken(), 0);
+            webView.clearFocus();
+        }
+        browserMode = enabled;
+        appControls.setVisibility(enabled ? View.GONE : View.VISIBLE);
+        browserControls.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        countHandler.removeCallbacks(countUpdater);
+        if (enabled) countHandler.post(countUpdater);
     }
 
     @Override
@@ -121,12 +214,16 @@ public class MainActivity extends Activity {
         super.onResume();
         lastResult.setText(getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getString("last_result", "尚无签到记录"));
+        sessionResult.setText("登录态：" + getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("last_refresh_result", "尚未自动刷新"));
     }
 
     @Override
     public void onBackPressed() {
-        if (webView.canGoBack()) {
+        if (browserMode && webView.canGoBack()) {
             webView.goBack();
+        } else if (browserMode) {
+            setBrowserMode(false);
         } else {
             super.onBackPressed();
         }
@@ -134,6 +231,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean("browser_mode", browserMode);
         webView.saveState(outState);
         super.onSaveInstanceState(outState);
     }
@@ -146,6 +244,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        countHandler.removeCallbacks(countUpdater);
         webView.destroy();
         super.onDestroy();
     }

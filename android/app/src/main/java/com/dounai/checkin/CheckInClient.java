@@ -3,6 +3,7 @@ package com.dounai.checkin;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.webkit.CookieManager;
+import android.webkit.WebSettings;
 
 import org.json.JSONObject;
 
@@ -14,18 +15,18 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.TreeSet;
 
 import javax.net.ssl.HttpsURLConnection;
 
 final class CheckInClient {
-    private static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
     private final Context context;
     private final String baseUrl;
     private final Map<String, String> cookies = new TreeMap<>();
-    private final TreeSet<String> initialCookieNames = new TreeSet<>();
+    private final List<String> setCookieHeaders = new ArrayList<>();
     private String tokenSeed = "";
 
     CheckInClient(Context context, String baseUrl, String cookieHeader) {
@@ -37,7 +38,6 @@ final class CheckInClient {
                 cookies.put(part.substring(0, separator).trim(), part.substring(separator + 1).trim());
             }
         }
-        initialCookieNames.addAll(cookies.keySet());
     }
 
     String checkIn() throws Exception {
@@ -75,6 +75,16 @@ final class CheckInClient {
         }
     }
 
+    void refreshSession() throws Exception {
+        if (cookies.isEmpty()) throw new SessionExpiredException("没有登录 Cookie，请在应用中重新登录");
+        try {
+            Response user = request("GET", "/user", null);
+            requireAuthenticated(user);
+        } finally {
+            saveCookies();
+        }
+    }
+
     private Response request(String method, String path, String formBody) throws Exception {
         HttpsURLConnection connection = (HttpsURLConnection) new URL(baseUrl + path).openConnection();
         connection.setInstanceFollowRedirects(false);
@@ -82,7 +92,7 @@ final class CheckInClient {
         connection.setReadTimeout(15000);
         connection.setRequestMethod(method);
         connection.setRequestProperty("Cookie", cookieHeader());
-        connection.setRequestProperty("User-Agent", USER_AGENT);
+        connection.setRequestProperty("User-Agent", WebSettings.getDefaultUserAgent(context));
         connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7");
         boolean ajax = path.startsWith("/auth/captcha") || path.equals("/user/checkin");
         if (ajax) {
@@ -90,9 +100,6 @@ final class CheckInClient {
             connection.setRequestProperty("Referer", baseUrl + "/user/panel");
             connection.setRequestProperty("X-Requested-With", "XMLHttpRequest");
             connection.setRequestProperty("Priority", "u=1, i");
-            connection.setRequestProperty("Sec-CH-UA", "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"Google Chrome\";v=\"152\"");
-            connection.setRequestProperty("Sec-CH-UA-Mobile", "?0");
-            connection.setRequestProperty("Sec-CH-UA-Platform", "\"macOS\"");
             connection.setRequestProperty("Sec-Fetch-Dest", "empty");
             connection.setRequestProperty("Sec-Fetch-Mode", "cors");
             connection.setRequestProperty("Sec-Fetch-Site", "same-origin");
@@ -117,6 +124,7 @@ final class CheckInClient {
                                 if (cookie.hasExpired() || cookie.getMaxAge() == 0) cookies.remove(cookie.getName());
                                 else cookies.put(cookie.getName(), cookie.getValue());
                             }
+                            setCookieHeaders.add(value);
                         } catch (IllegalArgumentException ignored) {
                             // A malformed Set-Cookie must not discard the existing session.
                         }
@@ -145,10 +153,16 @@ final class CheckInClient {
         if (response.status == 401 || response.status == 403 || response.status >= 300 && response.status < 400
                 && response.location != null && response.location.toLowerCase().contains("login")
                 || response.body.toLowerCase().contains("/auth/login") && response.body.contains("captcha_code")) {
-            throw new Exception("登录态已失效，请在应用中重新登录");
+            throw new SessionExpiredException("登录态已失效，请在应用中重新登录");
         }
         if (response.status < 200 || response.status >= 300) {
             throw new Exception("服务端返回 HTTP " + response.status);
+        }
+    }
+
+    static final class SessionExpiredException extends Exception {
+        SessionExpiredException(String message) {
+            super(message);
         }
     }
 
@@ -165,14 +179,11 @@ final class CheckInClient {
         String header = cookieHeader();
         SharedPreferences prefs = context.getSharedPreferences("site", Context.MODE_PRIVATE);
         prefs.edit().putString("cookie", header).apply();
-        CookieManager manager = CookieManager.getInstance();
-        for (String oldName : initialCookieNames) {
-            if (!cookies.containsKey(oldName)) manager.setCookie(baseUrl, oldName + "=; Max-Age=0");
+        if (!setCookieHeaders.isEmpty()) {
+            CookieManager manager = CookieManager.getInstance();
+            for (String value : setCookieHeaders) manager.setCookie(baseUrl, value);
+            manager.flush();
         }
-        for (Map.Entry<String, String> cookie : cookies.entrySet()) {
-            manager.setCookie(baseUrl, cookie.getKey() + "=" + cookie.getValue());
-        }
-        manager.flush();
     }
 
     private static String encode(String value) throws Exception {
