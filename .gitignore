@@ -5,6 +5,12 @@
 /dounai-checkin
 /dounai-linux-*
 /.gradle/
-/local.properties
-/app/build/
 /build/
+/android/.gradle/
+/android/.idea/
+/android/local.properties
+/android/app/build/
+/android/build/
+/ios/DerivedData/
+/ios/*.xcodeproj/xcuserdata/
+/ios/*.xcworkspace/xcuserdata/

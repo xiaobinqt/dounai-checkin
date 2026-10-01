@@ -6,13 +6,14 @@
 
 部分手机的 WebView 会在密码已经完整填入后仍只显示 1 个圆点，这是网页控件的显示问题。请以 APK 顶部显示的实际字符数为准，不要直接在网页密码栏中连续输入；数量不对时点“重新输入密码”。需要核对内容时，可以先在系统密码输入框勾选“显示密码”，再点“填入网页”。
 
-Android 的 WorkManager 会持久化每日签到和每 3 小时一次的登录态刷新任务，但省电、断网、关机等情况可能延迟运行。刷新也依赖服务端愿意延长会话，因此不能保证永不需要重新登录。登录失效的 Bark 提醒需要配置 Bark Key，普通网络故障不按失效处理。通知凭据保存在应用私有数据中，Android 备份已关闭。
+Android 的 WorkManager 会持久化每日签到、登录态刷新和可选的低电量检查任务，但省电、断网、关机等情况可能延迟运行。低电量任务最短约每 15 分钟检查一次，因此提醒不保证恰好在达到阈值时发出。登录态刷新也依赖服务端愿意延长会话，因此不能保证永不需要重新登录。登录失效和低电量 Bark 都需要配置 Bark Key，普通网络故障不按登录失效处理。通知凭据保存在应用私有数据中，Android 备份已关闭。
 
 项目使用 Go 版相同的 `common_old.onnx` 与 `charsets_old.json` 模型，并通过 ONNX Runtime Android 执行本机 OCR。模型来自 `go-ddddocr` v1.0.1。APK 支持 Android 7.0 及以上的 ARM64 与 ARMv7 手机。
 
-构建需要 JDK 17、Android SDK Platform 35 和 Android Gradle Plugin 8.13.2。用 Android Studio 打开仓库根目录并运行 `assembleDebug`，或在根目录执行：
+构建需要 JDK 17、Android SDK Platform 35 和 Android Gradle Plugin 8.13.2。用 Android Studio 打开仓库中的 `android` 目录并运行 `assembleDebug`，或执行：
 
 ```sh
+cd android
 ./gradlew assembleDebug
 ```
 

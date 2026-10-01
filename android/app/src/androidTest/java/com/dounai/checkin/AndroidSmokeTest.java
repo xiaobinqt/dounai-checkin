@@ -22,6 +22,17 @@ import java.io.InputStream;
 @RunWith(AndroidJUnit4.class)
 public class AndroidSmokeTest {
     @Test
+    public void batteryAlertUsesStrictThresholdAndHysteresis() {
+        assertEquals(false, BatteryMonitorWorker.shouldNotify(10, false, false));
+        assertEquals(true, BatteryMonitorWorker.shouldNotify(9, false, false));
+        assertEquals(false, BatteryMonitorWorker.shouldNotify(9, true, false));
+        assertEquals(false, BatteryMonitorWorker.shouldNotify(9, false, true));
+        assertEquals(false, BatteryMonitorWorker.shouldReset(14, false));
+        assertEquals(true, BatteryMonitorWorker.shouldReset(15, false));
+        assertEquals(true, BatteryMonitorWorker.shouldReset(5, true));
+    }
+
+    @Test
     public void currentCheckInPageTicketIsParsedAndSigned() throws Exception {
         String ticket = "1700000000.abc.def";
         assertEquals(ticket, CheckInClient.extractCheckInTicket(

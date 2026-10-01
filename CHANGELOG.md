@@ -1,6 +1,18 @@
-# Android 更新日志
+# 更新日志
+
+## 2026-10-01：多平台工程
+
+- `main` 分支调整为 Android 与 iOS 并存的单仓库结构，两个原生工程分别位于 `android/` 和 `ios/`。
+- 新增 iOS 初版源码，支持网站原页面登录、手动与后台签到、Bark 通知和退出账号。
+- Android APK 发布工作流改为从 `android/` 工程构建。
 
 脚本签到的历史更新记录保留在 [`script-checkin`](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin) 分支。
+
+## 2026-10-01：Android 1.0.3
+
+- 增加可选的低电量 Bark：约每 15 分钟读取一次手机电量，低于 10% 且未充电时发送一次提醒。
+- 开始充电或电量恢复到 15% 后重置提醒状态，避免低电量期间重复推送。
+- 低电量监控独立于自动签到和豆奶登录状态，可在通知设置中单独开关。
 
 ## 2026-10-01：Android 1.0.2
 

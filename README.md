@@ -1,69 +1,46 @@
-# 豆奶签到 Android
+# 豆奶签到
 
-在 Android 手机上完成网页登录，并按北京时间每天自动签到。支持 Bark 和邮件通知，登录 Cookie 只保存在应用私有数据中。
+在手机上完成豆奶站点登录，并在本机保存登录信息、执行签到。`main` 分支采用单仓库多平台结构：Android 与 iOS 各自使用独立工程，公共说明和发布工作流保留在仓库根目录。
 
-[下载 Android v1.0.2 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.2/dounai-checkin-android-v1.0.2.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.2) · [历史脚本分支](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin)
+## Android
 
-## 安装和登录
+[下载 Android v1.0.3 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.3/dounai-checkin-android-v1.0.3.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.3) · [Android 使用与构建说明](android/README.md)
 
-1. 下载 APK 并直接安装。支持 Android 7.0 及以上的 ARM64 与 ARMv7 手机。
-2. 在首页填写豆奶站点的 HTTPS 根地址，例如 `https://dounai.win`，然后点“打开签到页”。
-3. 邮箱、算式验证码和登录按钮都使用网站原页面。点击网页密码框或顶部“输入密码”，在系统输入框中完整输入密码，再点“填入网页”。APK 不保存登录密码。
-4. 网页登录成功后点“返回应用”。进入“自动签到设置”，勾选每天自动签到，选择北京时间的签到时间并保存。
-5. 可以先点“立即签到一次”验证完整流程。每次任务只提交一次，失败不会自动连续重试。
+Android 版支持每天自动签到、约每 3 小时刷新登录态、Bark 与邮件通知，以及电量低于 10% 时发送一次 Bark。APK 支持 Android 7.0 及以上的 ARM64 与 ARMv7 手机。
 
-### 网页密码栏只显示 1 个圆点
+安装后输入站点的 HTTPS 根地址并打开网页。邮箱、验证码和登录按钮都使用网站原页面；密码可通过应用提供的系统密码框完整填入当前网页，应用不会保存密码。登录成功后返回应用，设置每天签到的北京时间即可。
 
-部分手机的 WebView 在密码已经完整填入后，网页密码栏仍只画出 **1 个圆点**。这只是网页控件的显示问题，不表示密码只有一个字符，也不表示后一个字符覆盖了前一个字符。
+部分手机的 WebView 会在密码已经完整填入后仍只显示 **1 个圆点**。这是网页密码控件的显示问题，请以应用顶部显示的实际字符数为准。详细操作见 [Android 说明](android/README.md)。
 
-请以 APK 顶部的“密码已完整填入 N 个字符”为准。数量不对时点“重新输入密码”；需要核对内容时，可以先在系统密码输入框勾选“显示密码”，确认后再点“填入网页”。不要直接在网页密码栏里连续输入。
+## iOS
 
-## 自动签到
+[iOS 工程与使用说明](ios/README.md)
 
-手机端会按网站当前流程执行一次签到：
+iOS 源码与 Android 一同保存在 `main` 分支。初版支持在网站原页面登录、保存 Cookie、手动签到、后台签到请求、Bark 通知和退出账号。验证码与登录按钮仍由网站原页面处理，应用没有单独实现登录表单。
 
-1. 读取当前签到页面需要的校验信息。
-2. 加载并识别 SVG 或 PNG 算式验证码。
-3. 等待 4–7 秒，模拟正常的人机操作间隔。
-4. 按网站当前页面的正常流程提交一次签到。
-5. 接收服务端更新的 Cookie，并记录本次结果。
+iOS 的后台执行时间由系统决定，设置的时间是最早允许执行的时间，不能保证每天精确到指定分钟。当前仓库没有可直接安装的 IPA；需要在 macOS 上使用完整 Xcode 配置自己的 Apple 开发团队后安装到设备。
 
-开启自动签到后，应用还会约每 3 小时刷新登录态。刷新依赖服务端是否延长会话，Cookie 已失效时仍需重新在应用内登录。首页“退出账号”会清除登录 Cookie，关闭每日签到和登录态刷新任务，同时保留通知配置。
+## 仓库结构
 
-## 通知
-
-- Bark：填写设备 Key。签到成功或失败会推送通知；服务端明确判定登录失效时会额外提醒重新登录。
-- 邮件：填写邮箱、SMTP 主机、端口和授权码。支持 `465` 直接 TLS 和 `587` STARTTLS。
-- “发送测试通知”只验证通知配置，不会触发签到。
-
-Bark 和邮件均为可选配置。通知凭据保存在应用私有数据中，Android 备份已关闭。
-
-## 运行限制
-
-Android 使用 WorkManager 安排后台任务。省电策略、断网、关机或厂商后台限制可能使任务晚于设置时间执行；手机关机或长期断网时无法保证当天签到。
-
-GitHub Release 中的 APK 使用自动调试签名，可以直接安装。不同版本签名不一致时，Android 会要求先卸载旧版；卸载会清除 Cookie 和通知配置。
-
-## GitHub Actions 说明
-
-`main` 分支中的 [Android APK 发布工作流](.github/workflows/android-release.yml) 只负责在推送 `android-v*` 标签时构建 GitHub Release，不执行账号签到。
-
-原 Go、Docker 和 GitHub Actions 签到代码已经移到 [`script-checkin`](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin) 分支。该分支用于保留历史实现；GitHub-hosted runner 签到目前无法可靠通过站点的人机交互校验，不再作为推荐方案。
-
-## 本地构建
-
-详细说明见 [构建文档](BUILDING.md)。基本构建命令：
-
-```shell
-export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
-export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
-./gradlew assembleDebug
+```text
+.
+├── android/                 Android Gradle 工程、使用说明和发布说明
+├── ios/                     iOS Xcode 工程和使用说明
+├── .github/workflows/       移动端构建与发布工作流
+├── CHANGELOG.md             产品更新记录
+└── README.md                项目入口
 ```
 
-APK 生成在 `app/build/outputs/apk/debug/app-debug.apk`。
+这种结构让两个平台独立使用各自的构建工具，也能在同一分支统一维护产品说明和版本变更。
+
+## GitHub Actions 与历史脚本
+
+`main` 分支中的 [Android APK 发布工作流](.github/workflows/android-release.yml) 只在推送 `android-v*` 标签时构建 APK 并创建 GitHub Release；[iOS 构建工作流](.github/workflows/ios-build.yml) 只校验 Xcode 工程能否通过编译。两个工作流都不执行账号签到。
+
+原 Go、Docker 和 GitHub Actions 签到代码保存在 [`script-checkin`](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin) 分支。GitHub-hosted runner 目前无法可靠通过站点的人机交互校验，因此脚本和 Actions 签到只作为历史实现保留，当前推荐使用手机应用。
 
 ## 安全说明
 
 - Cookie 等同于登录凭据，不要发送到聊天、Issue、日志或公开仓库。
-- APK 不保存登录密码，只将本次输入写入当前网站登录页。
+- Android 和 iOS 应用都不保存登录密码。
 - 站点地址只接受 HTTPS 根地址，网络请求使用正常 TLS 证书校验。

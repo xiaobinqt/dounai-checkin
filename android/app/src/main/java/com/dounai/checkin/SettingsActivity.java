@@ -16,7 +16,7 @@ import android.widget.TextView;
 
 public class SettingsActivity extends Activity {
     private EditText time, barkKey, barkServer, email, emailHost, emailPort, emailPassword;
-    private CheckBox autoEnabled;
+    private CheckBox autoEnabled, batteryAlertEnabled;
     private TextView status;
 
     @Override
@@ -43,6 +43,10 @@ public class SettingsActivity extends Activity {
         time = field(form, "签到时间 HH:MM", prefs.getString("checkin_time", "09:17"), InputType.TYPE_CLASS_DATETIME);
         barkKey = field(form, "Bark 设备 Key（可选）", prefs.getString("bark_key", ""), InputType.TYPE_CLASS_TEXT);
         barkServer = field(form, "Bark 服务地址", prefs.getString("bark_server", "https://api.day.app"), InputType.TYPE_TEXT_VARIATION_URI);
+        batteryAlertEnabled = new CheckBox(this);
+        batteryAlertEnabled.setText("电量低于 10% 时发送一次 Bark（约每 15 分钟检查）");
+        batteryAlertEnabled.setChecked(prefs.getBoolean("battery_alert_enabled", false));
+        form.addView(batteryAlertEnabled);
         email = field(form, "邮件地址（发件人及收件人，可选）", prefs.getString("email", ""), InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         emailHost = field(form, "SMTP 主机", prefs.getString("email_host", ""), InputType.TYPE_CLASS_TEXT);
         int savedPort = prefs.getInt("email_port", 0);
@@ -68,7 +72,10 @@ public class SettingsActivity extends Activity {
             }).start();
         });
         status = new TextView(this);
-        status.setText("请先在首页登录站点，再开启自动签到。");
+        String batteryResult = prefs.getString("last_battery_result", "");
+        status.setText(batteryAlertEnabled.isChecked() && !batteryResult.isEmpty()
+                ? "低电量监控：" + batteryResult
+                : "请先在首页登录站点，再开启自动签到。");
         form.addView(status);
     }
 
@@ -100,6 +107,10 @@ public class SettingsActivity extends Activity {
             barkServer.setError("Bark 服务地址必须使用 HTTPS");
             return false;
         }
+        if (batteryAlertEnabled.isChecked() && barkKey.getText().toString().trim().isEmpty()) {
+            barkKey.setError("低电量提醒需要 Bark 设备 Key");
+            return false;
+        }
         String portText = emailPort.getText().toString().trim();
         int port;
         try {
@@ -123,6 +134,7 @@ public class SettingsActivity extends Activity {
         }
         getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
                 .putBoolean("auto_enabled", autoEnabled.isChecked())
+                .putBoolean("battery_alert_enabled", batteryAlertEnabled.isChecked())
                 .putString("checkin_time", checkInTime)
                 .putString("bark_key", barkKey.getText().toString().trim())
                 .putString("bark_server", server)
@@ -131,7 +143,11 @@ public class SettingsActivity extends Activity {
                 .putInt("email_port", port)
                 .putString("email_auth_code", password).apply();
         DailyScheduler.schedule(this);
-        status.setText(autoEnabled.isChecked() ? "已安排下一次每日签到" : "自动签到已关闭；通知设置已保存");
+        BatteryMonitorScheduler.schedule(this);
+        String message = autoEnabled.isChecked() ? "已安排下一次每日签到" : "自动签到已关闭";
+        if (batteryAlertEnabled.isChecked()) message += "；低电量 Bark 已开启";
+        else message += "；通知设置已保存";
+        status.setText(message);
         return true;
     }
 }

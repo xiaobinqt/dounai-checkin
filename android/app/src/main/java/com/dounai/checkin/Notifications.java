@@ -58,6 +58,16 @@ final class Notifications {
         }
     }
 
+    static String sendLowBattery(Context context, int percent) {
+        SharedPreferences prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
+        try {
+            sendBark(prefs, "手机电量低", "当前电量 " + percent + "% ，请及时充电。低电量提醒来自豆奶签到 APK。");
+            return "";
+        } catch (Exception error) {
+            return error.getMessage();
+        }
+    }
+
     private static void sendBark(SharedPreferences prefs, String title, String body) throws Exception {
         String key = prefs.getString("bark_key", "").trim();
         if (key.isEmpty()) return;
