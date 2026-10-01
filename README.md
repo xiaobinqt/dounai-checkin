@@ -1,107 +1,70 @@
-# dounai-checkin
+# 豆奶签到 Android
 
-豆奶每日签到工具。Android APK 在手机本地自动签到；Go 命令行可在本地手动运行。原 GitHub Actions 定时签到方案已失效。
+在 Android 手机上完成网页登录，并按北京时间每天自动签到。支持 Bark 和邮件通知，登录 Cookie 只保存在应用私有数据中。
 
-## 手机 APK 签到（推荐）
+[下载 Android v1.0.2 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.2/dounai-checkin-android-v1.0.2.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.2) · [历史脚本分支](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin)
 
-Android 版在手机上每天自动签到，支持 Bark 和邮件通知。下载并安装 [Android v1.0.2 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.2/dounai-checkin-android-v1.0.2.apk)（[发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.2)）。首次在首页填写豆奶站点的 HTTPS 根地址并打开登录页。点击网页密码框或顶部“输入密码”会打开系统密码输入框，完整输入后将密码填回当前网页；邮箱、算式验证码和登录按钮仍使用网站原页面，验证码不会离开网站流程。顶部会显示实际填入的密码字符数，APK 不保存登录密码。应用会把登录 Cookie 留在手机应用私有数据中供后台任务使用。
+## 安装和登录
 
-部分手机的 WebView 在密码已经完整填入后，网页密码栏仍只画出 **1 个圆点**。这只是网页控件的显示问题，不表示密码只有一个字符，也不表示后一个字符覆盖了前一个字符。请以 APK 顶部的“密码已完整填入 N 个字符”为准；如果数量不对，点“重新输入密码”再填一次。不要直接在网页密码栏里连续输入。需要核对内容时，可以先在系统密码输入框勾选“显示密码”，确认后再点“填入网页”。
+1. 下载 APK 并直接安装。支持 Android 7.0 及以上的 ARM64 与 ARMv7 手机。
+2. 在首页填写豆奶站点的 HTTPS 根地址，例如 `https://dounai.win`，然后点“打开签到页”。
+3. 邮箱、算式验证码和登录按钮都使用网站原页面。点击网页密码框或顶部“输入密码”，在系统输入框中完整输入密码，再点“填入网页”。APK 不保存登录密码。
+4. 网页登录成功后点“返回应用”。进入“自动签到设置”，勾选每天自动签到，选择北京时间的签到时间并保存。
+5. 可以先点“立即签到一次”验证完整流程。每次任务只提交一次，失败不会自动连续重试。
 
-网页登录成功后返回应用，在“自动签到设置”中勾选每天自动签到，填写北京时间的签到时间（默认 `09:17`），点击“保存并安排每日任务”。此时会同时安排约每 3 小时一次的登录态刷新，访问 `/user` 并接收更新的 Cookie。服务端明确判定登录失效时会发一次 Bark 提醒，请配置 Bark 设备 Key；临时断网不会误报。邮件通知需填写邮箱地址、SMTP 主机、端口和授权码，支持 `465` 直接 TLS 或 `587` STARTTLS。点击“发送测试通知”可以单独验证通知配置。“立即签到一次”会手动提交一次签到任务，失败不会自动重试。
+### 网页密码栏只显示 1 个圆点
 
-手机端会先打开 `/user/panel`，取得页面票据，再获取并解答签到验证码；等待 4–7 秒后按网站页面当前流程提交一次签到请求。隐藏蜜罐字段保持为空。支持 SVG 算式和 PNG 图片识别，并接收服务端轮换的 Cookie。首页“退出账号”会清除登录 Cookie、关闭后台任务并保留通知配置。APK 集成了 ONNX 模型，详情和本地构建方法见 [Android 工程说明](android/README.md)。Android 后台任务受省电策略、联网状态和系统调度影响，可能晚于设置时间执行；手机关机或长期断网时无法保证当天签到，也不能保证 Cookie 一定被延长。登录态失效时需要重新在应用内登录。各 GitHub Release 使用自动调试签名，跨版本安装若提示签名不一致，需要先卸载旧版；卸载会清除 Cookie 和通知配置。
+部分手机的 WebView 在密码已经完整填入后，网页密码栏仍只画出 **1 个圆点**。这只是网页控件的显示问题，不表示密码只有一个字符，也不表示后一个字符覆盖了前一个字符。
 
-GitHub Actions 定时签到方案已失效，详见下文。旧部署变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+请以 APK 顶部的“密码已完整填入 N 个字符”为准。数量不对时点“重新输入密码”；需要核对内容时，可以先在系统密码输入框勾选“显示密码”，确认后再点“填入网页”。不要直接在网页密码栏里连续输入。
 
-## Go 命令行（旧版）
+## 自动签到
 
-站点当前签到页已经增加页面票据和人机交互校验，以下 Go 命令行签到实现尚未同步该流程，不能作为当前签到方式；保留代码仅用于历史部署和开发参考。
+手机端会按网站当前流程执行一次签到：
 
-- 每三小时检查并刷新登录态
-- 每天定时签到，也支持手动签到
-- 每次任务只尝试签到一次，失败后不自动重试
-- 登录态失效时发送 Bark 提醒；北京时间 00:00–08:59 静默
-- 签到成功或失败时发送 Bark 通知
-- 自动接收服务端更新的 Cookie；可按需写入本地受保护文件
-- 支持本地命令和常驻模式
+1. 打开 `/user/panel` 获取本次页面票据。
+2. 加载并识别 SVG 或 PNG 算式验证码。
+3. 等待 4–7 秒，模拟正常的人机操作间隔。
+4. 保持隐藏蜜罐字段为空，使用页面票据和验证码生成令牌并提交。
+5. 接收服务端更新的 Cookie，并记录本次结果。
 
-## GitHub Actions 签到方案（已失效）
+开启自动签到后，应用还会约每 3 小时访问 `/user` 刷新登录态。刷新依赖服务端是否延长会话，Cookie 已失效时仍需重新在应用内登录。首页“退出账号”会清除登录 Cookie，关闭每日签到和登录态刷新任务，同时保留通知配置。
 
-原先使用 GitHub-hosted runner 或私有 self-hosted runner 定时调用豆奶签到接口的方案，当前已经无法可靠完成签到，项目不再提供这条部署路径。原有私有仓库中的签到和保活计划应停用，避免继续对真实账号重复请求；保存的 Cookie 和用于回写 Secret 的 token 可按需清理。手机 APK 在本机使用网站登录页和手机网络执行任务。
+## 通知
 
-本仓库的 [Android APK 发布工作流](.github/workflows/android-release.yml) 只在 Android 版本标签推送时构建 Release；[Docker 镜像构建工作流](.github/workflows/docker.yaml) 已改为手动触发。两者都不负责定时签到。Go 命令行仍可在本地手动使用，运行结果受站点当前规则与账号状态影响。
+- Bark：填写设备 Key。签到成功或失败会推送通知；服务端明确判定登录失效时会额外提醒重新登录。
+- 邮件：填写邮箱、SMTP 主机、端口和授权码。支持 `465` 直接 TLS 和 `587` STARTTLS。
+- “发送测试通知”只验证通知配置，不会触发签到。
 
-## 本地使用
+Bark 和邮件均为可选配置。通知凭据保存在应用私有数据中，Android 备份已关闭。
 
-构建：
+## 运行限制
 
-```shell
-go build -trimpath -ldflags="-s -w" -o dounai .
-```
+Android 使用 WorkManager 安排后台任务。省电策略、断网、关机或厂商后台限制可能使任务晚于设置时间执行；手机关机或长期断网时无法保证当天签到。
 
-项目使用 `go-ddddocr` 识别签到验证码，并自动计算简单的加减乘除验证码。构建需要 Go 1.25，运行目录的 `models` 子目录中需要放置 `common_old.onnx`、`charsets_old.json` 和 ONNX Runtime 1.23.2 动态库。也可通过 `DOUNAI_OCR_MODEL_DIR` 指定模型目录。Docker 镜像会包含这些文件。
+GitHub Release 中的 APK 使用自动调试签名，可以直接安装。不同版本签名不一致时，Android 会要求先卸载旧版；卸载会清除 Cookie 和通知配置。
 
-为避免 Cookie 出现在 shell 历史中，可静默读取：
+## GitHub Actions 说明
 
-```shell
-read -rsp "DOUNAI_COOKIE: " DOUNAI_COOKIE_INPUT
-echo
+`main` 分支中的 [Android APK 发布工作流](.github/workflows/android-release.yml) 只负责在推送 `android-v*` 标签时构建 GitHub Release，不执行账号签到。
 
-DOUNAI_URL="https://example.com" \
-DOUNAI_COOKIE="$DOUNAI_COOKIE_INPUT" \
-BARK_KEY="你的 Bark Key" \
-./dounai keepalive
-```
+原 Go、Docker 和 GitHub Actions 签到代码已经移到 [`script-checkin`](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin) 分支。该分支用于保留历史实现；GitHub-hosted runner 签到目前无法可靠通过站点的人机交互校验，不再作为推荐方案。
 
-执行一次签到：
+## 本地构建
+
+详细说明见 [Android 工程文档](android/README.md)。基本构建命令：
 
 ```shell
-DOUNAI_URL="https://example.com" \
-DOUNAI_COOKIE="$DOUNAI_COOKIE_INPUT" \
-BARK_KEY="你的 Bark Key" \
-./dounai checkin
-
-unset DOUNAI_COOKIE_INPUT
+cd android
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+./gradlew assembleDebug
 ```
 
-`checkin` 是 `once` 的别名。
-
-### 命令
-
-| 命令 | 说明 |
-| --- | --- |
-| `keepalive` | 检查登录态；失败时通知 |
-| `once` / `checkin` | 签到一次并退出 |
-| `start` | 常驻运行，每三小时保活并按配置时间签到 |
-| `test-email` | 测试可选的邮件通知 |
-
-### 参数与环境变量
-
-| 参数 | 环境变量 | 必填 | 默认值 | 说明 |
-| --- | --- | --- | --- | --- |
-| `--dounai_url` | `DOUNAI_URL` | 是 | - | 豆奶服务完整 HTTPS URL |
-| `--cookie_output` | `DOUNAI_COOKIE_OUTPUT` | 否 | - | Cookie 发生变化时，将完整请求头以 `0600` 权限写入指定文件 |
-| `--cookie` | `DOUNAI_COOKIE` | 是 | - | 完整 Cookie 请求头 |
-| `--bark_key` | `BARK_KEY` | 否 | - | Bark 设备 Key |
-| `--bark_server` | `BARK_SERVER` | 否 | `https://api.day.app` | Bark 服务地址 |
-| `--checkin_time` | `CHECKIN_TIME` | 仅 `start` | `10:00` | 常驻模式签到时间，UTC+8 |
-
-邮件通知参数 `EMAIL`、`EMAIL_HOST`、`EMAIL_PORT`、`EMAIL_AUTH_CODE` 和 `EMAIL_TLS` 均为可选。
+APK 生成在 `android/app/build/outputs/apk/debug/app-debug.apk`。
 
 ## 安全说明
 
-- Cookie 等同于登录凭据，应保存在手机应用私有数据或本地受保护的密钥存储中。
-- 不要把 Cookie 写入命令行参数、README、工作流源码、构建产物或日志。
-- 程序不会记录 Cookie 内容，错误消息也不会包含 Cookie。
-- HTTP 客户端使用正常 TLS 证书校验，不再跳过 HTTPS 证书验证。
-- Cookie 失效后，在浏览器重新登录并替换 `DOUNAI_COOKIE` 即可。
-
-## 开发验证
-
-```shell
-go test -race ./...
-go vet ./...
-```
-
-测试使用本地模拟服务，不需要真实 Cookie，也不会访问豆奶账号。
+- Cookie 等同于登录凭据，不要发送到聊天、Issue、日志或公开仓库。
+- APK 不保存登录密码，只将本次输入写入当前网站登录页。
+- 站点地址只接受 HTTPS 根地址，网络请求使用正常 TLS 证书校验。
