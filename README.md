@@ -6,6 +6,8 @@
 
 [下载 Android v1.0.4 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.4/dounai-checkin-android-v1.0.4.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.4) · [Android 使用与构建说明](android/README.md)
 
+**推荐使用 Android 版。** 当前版本已经在真实 Android 手机上完成网页登录、亮屏手动签到、黑屏签到和后台任务测试，APK 可以直接安装使用。
+
 Android 版支持每天自动签到、约每 3 小时刷新登录态、Bark 与邮件通知，以及电量低于 10% 时发送一次 Bark。APK 支持 Android 7.0 及以上的 ARM64 与 ARMv7 手机。
 
 安装后输入站点的 HTTPS 根地址并打开网页。邮箱、验证码和登录按钮都使用网站原页面；密码可通过应用提供的系统密码框完整填入当前网页，应用不会保存密码。登录成功后返回应用，设置每天签到的北京时间即可。
@@ -16,7 +18,7 @@ Android 版支持每天自动签到、约每 3 小时刷新登录态、Bark 与�
 
 [iOS 工程与使用说明](ios/README.md)
 
-iOS 源码与 Android 一同保存在 `main` 分支。初版支持在网站原页面登录、保存 Cookie、手动签到、后台签到请求、Bark 通知和退出账号。验证码与登录按钮仍由网站原页面处理，应用没有单独实现登录表单。
+iOS 源码与 Android 一同保存在 `main` 分支。初版支持在网站原页面登录、保存 Cookie、手动签到、后台签到请求、Bark 通知和退出账号。验证码与登录按钮仍由网站原页面处理，应用没有单独实现登录表单。当前仅通过模拟器编译检查，尚未完成 iPhone 真机签到测试。
 
 iOS 的后台执行时间由系统决定，不能保证每天精确到指定分钟。iOS 版目前先提供源码，还没有可直接下载的安装包。想装到自己的 iPhone，需要用 Mac 打开 Xcode，选中自己的 Apple 账号后点运行。
 
