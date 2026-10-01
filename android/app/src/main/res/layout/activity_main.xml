@@ -66,6 +66,12 @@
             android:text="立即签到一次" />
     </LinearLayout>
 
+    <Button
+        android:id="@+id/logout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="退出账号" />
+
     <TextView
         android:id="@+id/status"
         android:layout_width="match_parent"
@@ -96,31 +102,45 @@
         android:id="@+id/browser_controls"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:visibility="gone">
 
-        <Button
-            android:id="@+id/exit_browser"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="返回应用" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/exit_browser"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="返回应用" />
+
+            <Button
+                android:id="@+id/password_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="输入密码"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/browser_reload"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="刷新网页" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/password_count"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center"
+            android:paddingBottom="4dp"
             android:text=""
             android:textSize="14sp" />
-
-        <Button
-            android:id="@+id/browser_reload"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="刷新网页" />
     </LinearLayout>
 
     <WebView

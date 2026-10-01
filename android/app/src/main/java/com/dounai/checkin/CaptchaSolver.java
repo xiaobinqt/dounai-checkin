@@ -9,7 +9,9 @@ import android.util.Xml;
 import org.xmlpull.v1.XmlPullParser;
 
 import java.io.StringReader;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -66,6 +68,7 @@ final class CaptchaSolver {
     private static String recognizeImage(Context context, Bitmap bitmap) throws Exception {
         try (OnnxCaptchaRecognizer recognizer = new OnnxCaptchaRecognizer(context)) {
             Map<String, Integer> counts = new HashMap<>();
+            List<String> rawResults = new ArrayList<>();
             String first = "";
             Bitmap[] variants = {bitmap, highContrast(bitmap, 90), highContrast(bitmap, 120)};
             for (Bitmap variant : variants) {
@@ -78,6 +81,7 @@ final class CaptchaSolver {
                 }
                 String[] candidates = {whole, slots};
                 for (String candidate : candidates) {
+                    if (!candidate.isEmpty()) rawResults.add(candidate);
                     try {
                         String answer = solveExpression(candidate);
                         if (first.isEmpty()) first = candidate;
@@ -90,7 +94,7 @@ final class CaptchaSolver {
                 }
             }
             if (!first.isEmpty() && Pattern.matches("[0-9]{4}", solveExpression(first))) return first;
-            throw new Exception("PNG 验证码识别结果不一致");
+            throw new Exception("PNG 验证码识别结果不一致：" + rawResults);
         }
     }
 
@@ -104,7 +108,9 @@ final class CaptchaSolver {
             int end = width * slots[i][1] / 140;
             if (end <= start) throw new Exception("验证码裁剪范围无效");
             Bitmap crop = Bitmap.createBitmap(bitmap, start, 0, end - start, bitmap.getHeight());
-            expression.append(recognizer.classify(crop, i == 1 ? OPERATOR : OPERAND));
+            expression.append(i == 1
+                    ? recognizer.classifySingle(crop, OPERATOR)
+                    : recognizer.classify(crop, OPERAND));
             crop.recycle();
         }
         return expression.append('=').toString();

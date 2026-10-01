@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 final class DailyScheduler {
     private static final String WORK_NAME = "dounai-daily";
+    private static final String WORK_TAG = "dounai-checkin";
 
     static void schedule(Context context) {
         schedule(context, ExistingWorkPolicy.REPLACE);
@@ -43,6 +44,7 @@ final class DailyScheduler {
         if (target.getTimeInMillis() <= System.currentTimeMillis()) target.add(Calendar.DATE, 1);
         long delay = target.getTimeInMillis() - System.currentTimeMillis();
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(CheckInWorker.class)
+                .addTag(WORK_TAG)
                 .setInputData(new Data.Builder().putBoolean("automatic", true).build())
                 .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                 .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -52,10 +54,17 @@ final class DailyScheduler {
 
     static void checkInNow(Context context) {
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(CheckInWorker.class)
+                .addTag(WORK_TAG)
                 .setInputData(new Data.Builder().putBoolean("automatic", false).build())
                 .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build();
         WorkManager.getInstance(context).enqueue(request);
+    }
+
+    static void cancel(Context context) {
+        WorkManager manager = WorkManager.getInstance(context);
+        manager.cancelUniqueWork(WORK_NAME);
+        manager.cancelAllWorkByTag(WORK_TAG);
     }
 
     private DailyScheduler() {}

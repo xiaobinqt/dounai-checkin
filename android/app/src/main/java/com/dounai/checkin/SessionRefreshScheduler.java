@@ -39,5 +39,11 @@ final class SessionRefreshScheduler {
         WorkManager.getInstance(context).enqueueUniqueWork(EXPIRY_WORK_NAME, ExistingWorkPolicy.KEEP, request);
     }
 
+    static void cancel(Context context) {
+        WorkManager manager = WorkManager.getInstance(context);
+        manager.cancelUniqueWork(WORK_NAME);
+        manager.cancelUniqueWork(EXPIRY_WORK_NAME);
+    }
+
     private SessionRefreshScheduler() {}
 }

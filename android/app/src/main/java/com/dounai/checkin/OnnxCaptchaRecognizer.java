@@ -62,6 +62,14 @@ final class OnnxCaptchaRecognizer implements AutoCloseable {
     }
 
     String classify(Bitmap bitmap, String allowed) throws Exception {
+        return classify(bitmap, allowed, false);
+    }
+
+    String classifySingle(Bitmap bitmap, String allowed) throws Exception {
+        return classify(bitmap, allowed, true);
+    }
+
+    private String classify(Bitmap bitmap, String allowed, boolean requireSingleCharacter) throws Exception {
         int height = 64;
         int width = Math.max(1, bitmap.getWidth() * height / bitmap.getHeight());
         Bitmap resized = Bitmap.createScaledBitmap(bitmap, width, height, true);
@@ -89,6 +97,22 @@ final class OnnxCaptchaRecognizer implements AutoCloseable {
             allowedIndices.add(0);
             for (int i = 1; i < charsets.length; i++) {
                 if (!charsets[i].isEmpty() && allowed.contains(charsets[i])) allowedIndices.add(i);
+            }
+            if (requireSingleCharacter) {
+                int best = -1;
+                float bestScore = -Float.MAX_VALUE;
+                for (int t = 0; t < timesteps; t++) {
+                    int offset = t * batch * classes;
+                    for (int index : allowedIndices) {
+                        if (index <= 0 || index >= classes) continue;
+                        float score = scores.get(offset + index);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            best = index;
+                        }
+                    }
+                }
+                return best > 0 && best < charsets.length ? charsets[best] : "";
             }
             StringBuilder text = new StringBuilder();
             int previous = -1;

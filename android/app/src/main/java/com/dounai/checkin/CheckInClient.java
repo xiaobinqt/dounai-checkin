@@ -15,19 +15,25 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.net.ssl.HttpsURLConnection;
 
 final class CheckInClient {
+    private static final Pattern CHECKIN_TICKET = Pattern.compile(
+            "(?:var\\s+checkinTicket\\s*=|id=[\\\"']checkin-submit-btn[\\\"'][^>]*data-ticket=)\\s*[\\\"']([^\\\"']+)[\\\"']",
+            Pattern.CASE_INSENSITIVE);
+    private static final SecureRandom RANDOM = new SecureRandom();
     private final Context context;
     private final String baseUrl;
     private final Map<String, String> cookies = new TreeMap<>();
     private final List<String> setCookieHeaders = new ArrayList<>();
-    private String tokenSeed = "";
 
     CheckInClient(Context context, String baseUrl, String cookieHeader) {
         this.context = context;
@@ -47,6 +53,10 @@ final class CheckInClient {
         try {
             Response panel = request("GET", "/user/panel", null);
             requireAuthenticated(panel);
+            String ticket = extractCheckInTicket(panel.body);
+            if (ticket.isEmpty()) {
+                throw new Exception("签到页面未返回人机校验票据，请在网页中手动签到");
+            }
 
             Response captchaResponse = request("GET", "/auth/captcha?type=checkin&_=" + System.currentTimeMillis(), null);
             if (captchaResponse.status < 200 || captchaResponse.status >= 300) {
@@ -56,12 +66,14 @@ final class CheckInClient {
             if (captcha.optInt("ret") != 1 || captcha.optString("svg").trim().isEmpty()) {
                 throw new Exception("验证码获取失败：" + captcha.optString("msg", "服务端未返回验证码"));
             }
-            String seed = captcha.optString("seed").trim();
-            if (!seed.isEmpty()) tokenSeed = seed;
             String code = CaptchaSolver.solve(context, captcha.getString("svg"));
-            String token = checkInToken(captcha.optString("challenge").trim(), code,
-                    tokenSeed, captcha.optString("salt_mask").trim());
-            String body = "captcha_code=" + encode(code) + "&checkin_secret=&checkin_token=" + encode(token);
+            String token = sha256(ticket + "_" + code);
+            // The web page requires a real interaction interval between loading the
+            // captcha and submitting it. Keep the hidden honeypot field empty.
+            Thread.sleep(4000L + RANDOM.nextInt(3001));
+            String body = "captcha_code=" + encode(code)
+                    + "&checkin_secret=&checkin_ticket=" + encode(ticket)
+                    + "&checkin_token=" + encode(token);
             Response resultResponse = request("POST", "/user/checkin", body);
             requireAuthenticated(resultResponse);
             JSONObject result = new JSONObject(resultResponse.body);
@@ -82,6 +94,14 @@ final class CheckInClient {
             requireAuthenticated(user);
         } finally {
             saveCookies();
+        }
+    }
+
+    void logout() throws Exception {
+        if (cookies.isEmpty()) return;
+        Response response = request("GET", "/user/logout", null);
+        if (response.status < 200 || response.status >= 400) {
+            throw new Exception("服务端退出返回 HTTP " + response.status);
         }
     }
 
@@ -190,18 +210,12 @@ final class CheckInClient {
         return URLEncoder.encode(value, "UTF-8");
     }
 
-    private static String checkInToken(String challenge, String code, String seed, String saltMask) throws Exception {
-        if (challenge.isEmpty() || code.isEmpty()) return "";
-        String salt = "dou_2026";
-        if (!seed.isEmpty() || !saltMask.isEmpty()) {
-            String[] pieces = challenge.split("\\.");
-            String nonce = pieces.length >= 2 ? pieces[1] : "";
-            salt = sha256(seed + "_" + nonce + "_" + saltMask);
-        }
-        return sha256(challenge + "_" + code + "_" + salt);
+    static String extractCheckInTicket(String html) {
+        Matcher matcher = CHECKIN_TICKET.matcher(html == null ? "" : html);
+        return matcher.find() ? matcher.group(1).trim() : "";
     }
 
-    private static String sha256(String text) throws Exception {
+    static String sha256(String text) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
         StringBuilder hex = new StringBuilder(digest.length * 2);
         for (byte value : digest) hex.append(String.format("%02x", value & 0xff));
