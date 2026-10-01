@@ -8,6 +8,7 @@ import android.webkit.WebSettings;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpCookie;
@@ -106,7 +107,9 @@ final class CheckInClient {
     }
 
     private Response request(String method, String path, String formBody) throws Exception {
-        HttpsURLConnection connection = (HttpsURLConnection) new URL(baseUrl + path).openConnection();
+        HttpsURLConnection connection = null;
+        try {
+            connection = (HttpsURLConnection) new URL(baseUrl + path).openConnection();
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(15000);
@@ -134,7 +137,6 @@ final class CheckInClient {
                 stream.write(formBody.getBytes(StandardCharsets.UTF_8));
             }
         }
-        try {
             int status = connection.getResponseCode();
             for (Map.Entry<String, java.util.List<String>> header : connection.getHeaderFields().entrySet()) {
                 if (header.getKey() != null && header.getKey().equalsIgnoreCase("Set-Cookie")) {
@@ -164,8 +166,11 @@ final class CheckInClient {
                 }
             }
             return new Response(status, connection.getHeaderField("Location"), output.toString("UTF-8"));
+        } catch (IOException error) {
+            boolean safeToRetry = !"POST".equalsIgnoreCase(method);
+            throw new NetworkException("网络连接中断，请保持网络可用后重试", safeToRetry, error);
         } finally {
-            connection.disconnect();
+            if (connection != null) connection.disconnect();
         }
     }
 
@@ -183,6 +188,19 @@ final class CheckInClient {
     static final class SessionExpiredException extends Exception {
         SessionExpiredException(String message) {
             super(message);
+        }
+    }
+
+    static final class NetworkException extends Exception {
+        private final boolean safeToRetry;
+
+        NetworkException(String message, boolean safeToRetry, Throwable cause) {
+            super(message, cause);
+            this.safeToRetry = safeToRetry;
+        }
+
+        boolean isSafeToRetry() {
+            return safeToRetry;
         }
     }
 

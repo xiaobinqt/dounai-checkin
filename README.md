@@ -4,7 +4,7 @@
 
 ## Android
 
-[下载 Android v1.0.3 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.3/dounai-checkin-android-v1.0.3.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.3) · [Android 使用与构建说明](android/README.md)
+[下载 Android v1.0.4 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.4/dounai-checkin-android-v1.0.4.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.4) · [Android 使用与构建说明](android/README.md)
 
 Android 版支持每天自动签到、约每 3 小时刷新登录态、Bark 与邮件通知，以及电量低于 10% 时发送一次 Bark。APK 支持 Android 7.0 及以上的 ARM64 与 ARMv7 手机。
 

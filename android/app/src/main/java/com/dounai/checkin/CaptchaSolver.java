@@ -70,6 +70,9 @@ final class CaptchaSolver {
             Map<String, Integer> counts = new HashMap<>();
             List<String> rawResults = new ArrayList<>();
             String first = "";
+            String validSlotCandidate = "";
+            String validSlotAnswer = "";
+            boolean conflictingAnswer = false;
             Bitmap[] variants = {bitmap, highContrast(bitmap, 90), highContrast(bitmap, 120)};
             for (Bitmap variant : variants) {
                 String whole = recognizer.classify(variant, ALL);
@@ -80,11 +83,17 @@ final class CaptchaSolver {
                     slots = "";
                 }
                 String[] candidates = {whole, slots};
-                for (String candidate : candidates) {
+                for (int candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
+                    String candidate = candidates[candidateIndex];
                     if (!candidate.isEmpty()) rawResults.add(candidate);
                     try {
                         String answer = solveExpression(candidate);
                         if (first.isEmpty()) first = candidate;
+                        if (!validSlotAnswer.isEmpty() && !validSlotAnswer.equals(answer)) conflictingAnswer = true;
+                        if (candidateIndex == 1 && validSlotAnswer.isEmpty()) {
+                            validSlotCandidate = candidate;
+                            validSlotAnswer = answer;
+                        }
                         int count = counts.getOrDefault(answer, 0) + 1;
                         counts.put(answer, count);
                         if (count >= 2) return candidate;
@@ -94,6 +103,13 @@ final class CaptchaSolver {
                 }
             }
             if (!first.isEmpty() && Pattern.matches("[0-9]{4}", solveExpression(first))) return first;
+            // Slot recognition constrains the three regions to operand/operator/operand.
+            // A single complete slot result is usable when no other valid candidate
+            // produced a conflicting answer. This handles thin minus signs and faint
+            // right-hand digits that only survive one preprocessing variant.
+            if (!validSlotCandidate.isEmpty() && !conflictingAnswer && counts.size() == 1) {
+                return validSlotCandidate;
+            }
             throw new Exception("PNG 验证码识别结果不一致：" + rawResults);
         }
     }

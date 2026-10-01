@@ -29,7 +29,6 @@ public class CheckInWorker extends Worker {
             SharedPreferences settings = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
             String day = shanghaiDay();
             if (automatic && day.equals(site.getString("last_auto_date", ""))) return Result.success();
-            if (automatic) site.edit().putString("last_auto_date", day).commit();
             boolean success = false;
             boolean expired = false;
             String message;
@@ -44,6 +43,13 @@ public class CheckInWorker extends Worker {
             } catch (CheckInClient.SessionExpiredException error) {
                 expired = true;
                 message = error.getMessage();
+            } catch (CheckInClient.NetworkException error) {
+                message = error.getMessage();
+                if (automatic && error.isSafeToRetry() && getRunAttemptCount() < 3) {
+                    site.edit().putString("last_result", "网络暂时不可用，后台签到将在稍后重试")
+                            .putLong("last_run_at", System.currentTimeMillis()).apply();
+                    return Result.retry();
+                }
             } catch (Exception error) {
                 message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
@@ -54,6 +60,7 @@ public class CheckInWorker extends Worker {
             if (!notificationError.isEmpty()) result += "；通知失败：" + notificationError;
             site.edit().putString("last_result", result)
                     .putLong("last_run_at", System.currentTimeMillis()).apply();
+            if (automatic) site.edit().putString("last_auto_date", day).apply();
             if (automatic && settings.getBoolean("auto_enabled", false)) DailyScheduler.scheduleNext(context);
             return Result.success();
         }

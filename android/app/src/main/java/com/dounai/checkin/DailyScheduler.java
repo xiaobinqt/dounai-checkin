@@ -47,6 +47,7 @@ final class DailyScheduler {
                 .addTag(WORK_TAG)
                 .setInputData(new Data.Builder().putBoolean("automatic", true).build())
                 .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
                 .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build();
         manager.enqueueUniqueWork(WORK_NAME, policy, request);
