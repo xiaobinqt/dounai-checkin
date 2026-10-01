@@ -52,16 +52,15 @@ GitHub Release 中的 APK 使用自动调试签名，可以直接安装。不同
 
 ## 本地构建
 
-详细说明见 [Android 工程文档](android/README.md)。基本构建命令：
+详细说明见 [构建文档](BUILDING.md)。基本构建命令：
 
 ```shell
-cd android
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
 ./gradlew assembleDebug
 ```
 
-APK 生成在 `android/app/build/outputs/apk/debug/app-debug.apk`。
+APK 生成在 `app/build/outputs/apk/debug/app-debug.apk`。
 
 ## 安全说明
 

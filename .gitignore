@@ -4,8 +4,7 @@
 /dounai
 /dounai-checkin
 /dounai-linux-*
-/android/.gradle/
-/android/.idea/
-/android/local.properties
-/android/app/build/
-/android/build/
+/.gradle/
+/local.properties
+/app/build/
+/build/

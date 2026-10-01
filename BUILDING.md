@@ -10,7 +10,7 @@ Android 的 WorkManager 会持久化每日签到和每 3 小时一次的登录�
 
 项目使用 Go 版相同的 `common_old.onnx` 与 `charsets_old.json` 模型，并通过 ONNX Runtime Android 执行本机 OCR。模型来自 `go-ddddocr` v1.0.1。APK 支持 Android 7.0 及以上的 ARM64 与 ARMv7 手机。
 
-构建需要 JDK 17、Android SDK Platform 35 和 Android Gradle Plugin 8.13.2。用 Android Studio 打开 `android` 目录并运行 `assembleDebug`，或在该目录执行：
+构建需要 JDK 17、Android SDK Platform 35 和 Android Gradle Plugin 8.13.2。用 Android Studio 打开仓库根目录并运行 `assembleDebug`，或在根目录执行：
 
 ```sh
 ./gradlew assembleDebug
