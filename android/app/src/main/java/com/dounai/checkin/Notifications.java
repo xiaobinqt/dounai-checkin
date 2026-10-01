@@ -7,6 +7,7 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.OutputStream;
@@ -74,18 +75,43 @@ final class Notifications {
         String server = prefs.getString("bark_server", "https://api.day.app").trim().replaceAll("/+$", "");
         URL url = new URL(server + "/" + java.net.URLEncoder.encode(key, "UTF-8"));
         if (!"https".equalsIgnoreCase(url.getProtocol())) throw new Exception("Bark 服务地址必须使用 HTTPS");
+        JSONObject payload = new JSONObject().put("title", title).put("body", body).put("group", "豆奶签到");
+        Exception lastError = null;
+        long[] delays = {0L, 5000L, 15000L};
+        for (long delay : delays) {
+            if (delay > 0) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new Exception("通知重试被中断", error);
+                }
+            }
+            try {
+                sendBarkOnce(url, payload);
+                return;
+            } catch (RetryableBarkException error) {
+                lastError = error;
+            }
+        }
+        throw lastError == null ? new Exception("Bark 请求失败") : lastError;
+    }
+
+    private static void sendBarkOnce(URL url, JSONObject payload) throws Exception {
         HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-        connection.setConnectTimeout(10000);
-        connection.setReadTimeout(10000);
+        connection.setConnectTimeout(20000);
+        connection.setReadTimeout(20000);
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
         connection.setDoOutput(true);
-        JSONObject payload = new JSONObject().put("title", title).put("body", body).put("group", "豆奶签到");
         try {
             try (OutputStream stream = connection.getOutputStream()) {
                 stream.write(payload.toString().getBytes(StandardCharsets.UTF_8));
             }
             int status = connection.getResponseCode();
+            if (status == 408 || status == 429 || status >= 500) {
+                throw new RetryableBarkException("HTTP " + status);
+            }
             if (status < 200 || status >= 300) throw new Exception("HTTP " + status);
             byte[] bytes;
             try (java.io.InputStream stream = connection.getInputStream()) {
@@ -100,8 +126,22 @@ final class Notifications {
             }
             JSONObject response = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
             if (response.optInt("code") != 200) throw new Exception(response.optString("message", "服务端拒绝通知"));
+        } catch (IOException error) {
+            String message = error.getMessage();
+            throw new RetryableBarkException(message == null || message.isEmpty()
+                    ? error.getClass().getSimpleName() : message, error);
         } finally {
             connection.disconnect();
+        }
+    }
+
+    private static final class RetryableBarkException extends Exception {
+        RetryableBarkException(String message) {
+            super(message);
+        }
+
+        RetryableBarkException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 

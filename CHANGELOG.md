@@ -8,6 +8,11 @@
 
 脚本签到的历史更新记录保留在 [`script-checkin`](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin) 分支。
 
+## 2026-10-02：Android 1.0.5
+
+- Bark 遇到超时、DNS、连接中断、限流或临时服务器错误时最多重试两次。
+- Bark 单次连接和读取超时从 10 秒延长到 20 秒，改善黑屏网络恢复较慢时签到成功但通知失败的问题。
+
 ## 2026-10-01：Android 1.0.4
 
 - 修复部分手机黑屏后 Wi-Fi 暂时不可用导致的 SSL 和 DNS 错误；自动任务会在尚未提交签到时延后重试。

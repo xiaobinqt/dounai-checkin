@@ -4,7 +4,7 @@
 
 ## Android
 
-[下载 Android v1.0.4 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.4/dounai-checkin-android-v1.0.4.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.4) · [Android 使用与构建说明](android/README.md)
+[下载 Android v1.0.5 APK](https://github.com/xiaobinqt/dounai-checkin/releases/download/android-v1.0.5/dounai-checkin-android-v1.0.5.apk) · [查看发布说明](https://github.com/xiaobinqt/dounai-checkin/releases/tag/android-v1.0.5) · [Android 使用与构建说明](android/README.md)
 
 **推荐使用 Android 版。** 当前版本已经在真实 Android 手机上完成网页登录、亮屏手动签到、黑屏签到和后台任务测试，APK 可以直接安装使用。
 
