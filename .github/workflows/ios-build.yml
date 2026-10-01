@@ -20,11 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build for iOS Simulator
-        run: >-
-          xcodebuild
-          -project ios/DounaiCheckin.xcodeproj
-          -scheme DounaiCheckin
-          -sdk iphonesimulator
-          -destination 'generic/platform=iOS Simulator'
-          CODE_SIGNING_ALLOWED=NO
-          build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ios/DounaiCheckin.xcodeproj \
+            -scheme DounaiCheckin \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee /tmp/dounai-xcodebuild.log
+      - name: Report compiler errors
+        if: failure()
+        run: |
+          grep -E '(^|: )(error:|fatal error:)' /tmp/dounai-xcodebuild.log \
+            | head -50 \
+            | while IFS= read -r line; do echo "::error::$line"; done
