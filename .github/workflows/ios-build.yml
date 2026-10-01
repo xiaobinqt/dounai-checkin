@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build for iOS Simulator
         run: |
           set -o pipefail
