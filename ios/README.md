@@ -15,12 +15,12 @@ iOS 工程使用 SwiftUI、WKWebView、Vision 和 BackgroundTasks，不依赖第
 
 ## 构建和安装
 
-1. 在 macOS 安装完整 Xcode 16 或更高版本。
+1. 在 Mac 上安装 Xcode 16 或更高版本。
 2. 用 Xcode 打开 `ios/DounaiCheckin.xcodeproj`。
-3. 选择 `DounaiCheckin` target，在 Signing & Capabilities 中选择自己的 Apple 开发团队，并按需修改 Bundle Identifier。
-4. 连接 iPhone，选择设备后运行。
+3. 在 Signing & Capabilities 中选中自己的 Apple 账号。
+4. 连接 iPhone，选择这台手机后点运行。
 
-个人免费开发签名的有效期和设备限制由 Apple 决定。仓库不包含开发者证书、描述文件或可直接安装的 IPA。
+用免费 Apple 账号也可以给自己的手机安装，但过一段时间后可能需要重新安装。仓库目前不提供可直接下载的 IPA。
 
 ## 后台执行限制
 
