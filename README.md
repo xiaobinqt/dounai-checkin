@@ -1,6 +1,8 @@
-# dounai-checkin
+# 豆奶签到脚本（历史分支）
 
 豆奶 Cookie 签到与登录态保活工具。用户在浏览器中手动完成一次登录，程序复用登录 Cookie，并在签到时识别或计算服务端验证码。
+
+> 此分支用于保留旧版 Go、Docker 和 GitHub Actions 脚本。站点目前的人机交互校验已经变化，脚本签到及 GitHub-hosted runner 不能保证可用，不再作为默认方案。当前可用的手机 APK、安装说明和源码位于 [`main`](https://github.com/xiaobinqt/dounai-checkin/tree/main) 分支。
 
 **升级现有部署前，请先查看 [更新日志与升级说明](CHANGELOG.md)，其中会注明是否需要同步私有 runner 的 YAML 或更新 Secrets。**
 
@@ -16,11 +18,11 @@
 
 ## 工作方式
 
-推荐使用“公开源码 + 私有 Runner”结构：
+历史部署采用“公开源码 + 私有 Runner”结构：
 
 ```text
 xiaobinqt/dounai-checkin (Public)
-              ↓ 每次拉取最新 main
+              ↓ 固定拉取 script-checkin
 你的 dounai-checkin-runner (Private)
               ↓
      keepalive（每 3 小时）
@@ -31,7 +33,7 @@ xiaobinqt/dounai-checkin (Public)
 
 账号 Cookie 和 Bark Key 只保存在私有 Runner 仓库。公开源码更新后，下一次 Action 自动使用新版本，不需要向两个仓库重复推送代码。
 
-## GitHub Actions 配置
+## GitHub Actions 历史配置
 
 ### 1. 创建私有 Runner 仓库
 
@@ -50,7 +52,7 @@ Visibility: Private
 .github/workflows/checkin.yml
 ```
 
-模板默认拉取 `xiaobinqt/dounai-checkin` 的 `main` 分支，不需要额外 GitHub Token。
+模板固定拉取 `xiaobinqt/dounai-checkin` 的 `script-checkin` 分支，不需要额外 GitHub Token。
 
 ### 3. 获取 Cookie
 
