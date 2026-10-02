@@ -8,6 +8,11 @@
 
 脚本签到的历史更新记录保留在 [`script-checkin`](https://github.com/xiaobinqt/dounai-checkin/tree/script-checkin) 分支。
 
+## 2026-10-02：Android 1.0.6
+
+- Bark 和邮件改为并行发送，任一渠道超时或失败不会阻塞另一渠道。
+- 测试通知和签到结果通知使用相同的并行发送逻辑，并分别显示各渠道错误。
+
 ## 2026-10-02：Android 1.0.5
 
 - Bark 遇到超时、DNS、连接中断、限流或临时服务器错误时最多重试两次。

@@ -15,6 +15,10 @@ import java.net.Socket;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocket;
@@ -25,19 +29,46 @@ final class Notifications {
         SharedPreferences prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
         String title = success ? (message.contains("已签到") || message.contains("已续过命")
                 ? "豆奶今日已签到" : "豆奶签到成功") : "豆奶签到失败";
-        StringBuilder errors = new StringBuilder();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            sendBark(prefs, title, message);
-        } catch (Exception error) {
-            errors.append("Bark：").append(error.getMessage());
+            Future<String> bark = executor.submit(() -> channelError("Bark", () -> sendBark(prefs, title, message)));
+            Future<String> email = executor.submit(() -> channelError("邮件", () -> sendEmail(prefs, title, message)));
+            String barkError = awaitChannel(bark, "Bark");
+            String emailError = awaitChannel(email, "邮件");
+            if (barkError.isEmpty()) return emailError;
+            if (emailError.isEmpty()) return barkError;
+            return barkError + "；" + emailError;
+        } finally {
+            executor.shutdownNow();
         }
+    }
+
+    private static String channelError(String channel, NotificationAction action) {
         try {
-            sendEmail(prefs, title, message);
+            action.run();
+            return "";
         } catch (Exception error) {
-            if (errors.length() > 0) errors.append("；");
-            errors.append("邮件：").append(error.getMessage());
+            String message = error.getMessage();
+            return channel + "：" + (message == null || message.isEmpty()
+                    ? error.getClass().getSimpleName() : message);
         }
-        return errors.toString();
+    }
+
+    private static String awaitChannel(Future<String> future, String channel) {
+        try {
+            return future.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return channel + "：通知任务被中断";
+        } catch (ExecutionException error) {
+            Throwable cause = error.getCause();
+            String message = cause == null ? "未知错误" : cause.getMessage();
+            return channel + "：" + (message == null || message.isEmpty() ? "未知错误" : message);
+        }
+    }
+
+    private interface NotificationAction {
+        void run() throws Exception;
     }
 
     static String test(Context context) {
