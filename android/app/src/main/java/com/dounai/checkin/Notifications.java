@@ -185,20 +185,51 @@ final class Notifications {
         if (address.isEmpty() || host.isEmpty() || password.isEmpty() || port < 1 || port > 65535) {
             throw new Exception("邮件地址、SMTP 主机、端口和授权码必须完整填写");
         }
+        Exception lastError = null;
+        long[] delays = {0L, 5000L, 15000L};
+        for (long delay : delays) {
+            if (delay > 0) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new Exception("邮件重试被中断", error);
+                }
+            }
+            try {
+                sendEmailOnce(address, host, password, port, title, body);
+                return;
+            } catch (RetryableEmailException error) {
+                lastError = error;
+            }
+        }
+        throw lastError == null ? new Exception("邮件发送失败") : lastError;
+    }
+
+    private static void sendEmailOnce(String address, String host, String password, int port,
+                                      String title, String body) throws Exception {
         boolean implicitTls = port == 465;
         Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(host, port), 15000);
-        if (implicitTls) socket = ((SSLSocketFactory) SSLSocketFactory.getDefault()).createSocket(socket, host, port, true);
-        socket.setSoTimeout(15000);
+        boolean messageBodyStarted = false;
+        String stage = "连接服务器";
         try {
+            socket.connect(new InetSocketAddress(host, port), 15000);
+            if (implicitTls) {
+                stage = "建立 TLS";
+                socket = ((SSLSocketFactory) SSLSocketFactory.getDefault())
+                        .createSocket(socket, host, port, true);
+            }
+            socket.setSoTimeout(15000);
             if (socket instanceof SSLSocket) {
                 verifyHost((SSLSocket) socket);
                 ((SSLSocket) socket).startHandshake();
             }
+            stage = "读取服务器响应";
             SmtpSession smtp = new SmtpSession(socket);
             smtp.expect(220);
             smtp.command("EHLO dounai-checkin", 250);
             if (!implicitTls) {
+                stage = "建立 STARTTLS";
                 smtp.command("STARTTLS", 220);
                 socket = ((SSLSocketFactory) SSLSocketFactory.getDefault()).createSocket(socket, host, port, true);
                 socket.setSoTimeout(15000);
@@ -207,9 +238,11 @@ final class Notifications {
                 smtp = new SmtpSession(socket);
                 smtp.command("EHLO dounai-checkin", 250);
             }
+            stage = "登录";
             smtp.command("AUTH LOGIN", 334);
             smtp.command(base64(address), 334);
             smtp.command(base64(password), 235);
+            stage = "准备邮件";
             smtp.command("MAIL FROM:<" + address + ">", 250);
             smtp.command("RCPT TO:<" + address + ">", 250);
             smtp.command("DATA", 354);
@@ -217,10 +250,36 @@ final class Notifications {
                     + "Subject: =?UTF-8?B?" + base64(title) + "?=\r\n"
                     + "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n"
                     + "Content-Transfer-Encoding: base64\r\n\r\n" + base64(body) + "\r\n.";
+            stage = "提交邮件";
+            messageBodyStarted = true;
             smtp.command(mime, 250);
-            smtp.command("QUIT", 221);
+            // Once the server returns 250 the message is accepted. Some mobile
+            // networks or SMTP servers close the socket instead of replying to
+            // QUIT; that must not turn an accepted message into a reported failure.
+            try {
+                smtp.command("QUIT", 221);
+            } catch (Exception ignored) {
+                // Delivery has already been confirmed.
+            }
+        } catch (IOException error) {
+            String detail = error.getMessage();
+            if (detail == null || detail.trim().isEmpty()) detail = error.getClass().getSimpleName();
+            if (!messageBodyStarted) {
+                throw new RetryableEmailException("SMTP " + stage + "失败：" + detail, error);
+            }
+            throw new Exception("SMTP 提交邮件时连接中断，发送状态未知，请检查收件箱", error);
         } finally {
-            socket.close();
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // Closing a completed or already-aborted SMTP connection is harmless.
+            }
+        }
+    }
+
+    private static final class RetryableEmailException extends Exception {
+        RetryableEmailException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 

@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.InputType;
+import android.util.Log;
 import android.view.WindowManager;
 import android.view.View;
 import android.widget.Button;
@@ -68,7 +69,9 @@ public class SettingsActivity extends Activity {
             status.setText("正在发送测试通知…");
             new Thread(() -> {
                 String error = Notifications.test(getApplicationContext());
-                runOnUiThread(() -> status.setText(error.isEmpty() ? "测试通知已发送" : "测试通知失败：" + error));
+                String result = error.isEmpty() ? "测试通知已发送" : "测试通知失败：" + error;
+                Log.i("DounaiCheckin", result);
+                runOnUiThread(() -> status.setText(result));
             }).start();
         });
         status = new TextView(this);
