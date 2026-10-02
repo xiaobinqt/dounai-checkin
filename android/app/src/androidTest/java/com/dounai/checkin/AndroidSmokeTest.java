@@ -1,7 +1,9 @@
 package com.dounai.checkin;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -39,6 +41,14 @@ public class AndroidSmokeTest {
                 "<script>var checkinTicket = \"" + ticket + "\";</script>"));
         assertEquals("7490275144fdb42049c3bf91a82234dc59e68eb1143c6a25ff714f51391afa73",
                 CheckInClient.sha256(ticket + "_4"));
+    }
+
+    @Test
+    public void onlyCaptchaRejectionsUseTheCaptchaRetry() {
+        assertTrue(CheckInClient.isCaptchaRejected("验证码错误，还剩2次机会"));
+        assertTrue(CheckInClient.isCaptchaRejected("验证码不正确"));
+        assertFalse(CheckInClient.isCaptchaRejected("页面凭据已过期或失效"));
+        assertFalse(CheckInClient.isCaptchaRejected("网络连接中断"));
     }
 
     @Test

@@ -52,37 +52,56 @@ final class CheckInClient {
             throw new Exception("没有登录 Cookie，请先在应用中打开签到页并登录");
         }
         try {
-            Response panel = request("GET", "/user/panel", null);
-            requireAuthenticated(panel);
-            String ticket = extractCheckInTicket(panel.body);
-            if (ticket.isEmpty()) {
-                throw new Exception("签到页面未返回人机校验票据，请在网页中手动签到");
-            }
+            for (int submissionAttempt = 0; submissionAttempt < 2; submissionAttempt++) {
+                String ticket = "";
+                String code = "";
+                Exception lastRecognitionError = null;
+                for (int recognitionAttempt = 0; recognitionAttempt < 2; recognitionAttempt++) {
+                    Response panel = request("GET", "/user/panel", null);
+                    requireAuthenticated(panel);
+                    ticket = extractCheckInTicket(panel.body);
+                    if (ticket.isEmpty()) {
+                        throw new Exception("签到页面未返回人机校验票据，请在网页中手动签到");
+                    }
 
-            Response captchaResponse = request("GET", "/auth/captcha?type=checkin&_=" + System.currentTimeMillis(), null);
-            if (captchaResponse.status < 200 || captchaResponse.status >= 300) {
-                throw new Exception("验证码接口返回 HTTP " + captchaResponse.status);
+                    Response captchaResponse = request("GET", "/auth/captcha?type=checkin&_=" + System.currentTimeMillis(), null);
+                    if (captchaResponse.status < 200 || captchaResponse.status >= 300) {
+                        throw new Exception("验证码接口返回 HTTP " + captchaResponse.status);
+                    }
+                    JSONObject captcha = new JSONObject(captchaResponse.body);
+                    if (captcha.optInt("ret") != 1 || captcha.optString("svg").trim().isEmpty()) {
+                        throw new Exception("验证码获取失败：" + captcha.optString("msg", "服务端未返回验证码"));
+                    }
+                    try {
+                        code = CaptchaSolver.solve(context, captcha.getString("svg"));
+                        lastRecognitionError = null;
+                        break;
+                    } catch (Exception error) {
+                        lastRecognitionError = error;
+                    }
+                }
+                if (lastRecognitionError != null || code.isEmpty()) {
+                    throw new Exception("两张验证码均无法可靠识别，已停止提交以保护剩余签到机会",
+                            lastRecognitionError);
+                }
+                String token = sha256(ticket + "_" + code);
+                // Every submission keeps the same interaction interval as the web
+                // page, including the one allowed retry after a rejected captcha.
+                Thread.sleep(4000L + RANDOM.nextInt(3001));
+                String body = "captcha_code=" + encode(code)
+                        + "&checkin_secret=&checkin_ticket=" + encode(ticket)
+                        + "&checkin_token=" + encode(token);
+                Response resultResponse = request("POST", "/user/checkin", body);
+                requireAuthenticated(resultResponse);
+                JSONObject result = new JSONObject(resultResponse.body);
+                String message = result.optString("msg").trim();
+                if (result.optInt("ret") != 1 || !isConfirmedSuccess(message)) {
+                    if (submissionAttempt == 0 && isCaptchaRejected(message)) continue;
+                    throw new Exception(message.isEmpty() ? "签到未被服务端确认" : message);
+                }
+                return message;
             }
-            JSONObject captcha = new JSONObject(captchaResponse.body);
-            if (captcha.optInt("ret") != 1 || captcha.optString("svg").trim().isEmpty()) {
-                throw new Exception("验证码获取失败：" + captcha.optString("msg", "服务端未返回验证码"));
-            }
-            String code = CaptchaSolver.solve(context, captcha.getString("svg"));
-            String token = sha256(ticket + "_" + code);
-            // The web page requires a real interaction interval between loading the
-            // captcha and submitting it. Keep the hidden honeypot field empty.
-            Thread.sleep(4000L + RANDOM.nextInt(3001));
-            String body = "captcha_code=" + encode(code)
-                    + "&checkin_secret=&checkin_ticket=" + encode(ticket)
-                    + "&checkin_token=" + encode(token);
-            Response resultResponse = request("POST", "/user/checkin", body);
-            requireAuthenticated(resultResponse);
-            JSONObject result = new JSONObject(resultResponse.body);
-            String message = result.optString("msg").trim();
-            if (result.optInt("ret") != 1 || !isConfirmedSuccess(message)) {
-                throw new Exception(message.isEmpty() ? "签到未被服务端确认" : message);
-            }
-            return message;
+            throw new Exception("验证码重试后仍未通过，已停止签到");
         } finally {
             saveCookies();
         }
@@ -246,6 +265,11 @@ final class CheckInClient {
                 || message.contains("已经签到") || message.contains("已签到")
                 || message.contains("签到成功") || message.contains("续命成功")) return true;
         return java.util.regex.Pattern.compile("(?:^|[^未])获得了?\\s*[0-9]").matcher(message).find();
+    }
+
+    static boolean isCaptchaRejected(String message) {
+        return message.contains("验证码") && (message.contains("错误")
+                || message.contains("不正确") || message.contains("失败"));
     }
 
     private static final class Response {

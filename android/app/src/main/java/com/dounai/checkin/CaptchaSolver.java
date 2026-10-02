@@ -11,8 +11,10 @@ import org.xmlpull.v1.XmlPullParser;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -67,14 +69,12 @@ final class CaptchaSolver {
 
     private static String recognizeImage(Context context, Bitmap bitmap) throws Exception {
         try (OnnxCaptchaRecognizer recognizer = new OnnxCaptchaRecognizer(context)) {
-            Map<String, Integer> counts = new HashMap<>();
+            Map<String, Integer> variantVotes = new HashMap<>();
+            Map<String, String> representativeCandidates = new HashMap<>();
             List<String> rawResults = new ArrayList<>();
-            String first = "";
-            String validSlotCandidate = "";
-            String validSlotAnswer = "";
-            boolean conflictingAnswer = false;
             Bitmap[] variants = {bitmap, highContrast(bitmap, 90), highContrast(bitmap, 120)};
-            for (Bitmap variant : variants) {
+            for (int variantIndex = 0; variantIndex < variants.length; variantIndex++) {
+                Bitmap variant = variants[variantIndex];
                 String whole = recognizer.classify(variant, ALL);
                 String slots;
                 try {
@@ -83,34 +83,32 @@ final class CaptchaSolver {
                     slots = "";
                 }
                 String[] candidates = {whole, slots};
-                for (int candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
-                    String candidate = candidates[candidateIndex];
+                Set<String> answersInVariant = new HashSet<>();
+                Map<String, String> candidatesInVariant = new HashMap<>();
+                for (String candidate : candidates) {
                     if (!candidate.isEmpty()) rawResults.add(candidate);
                     try {
                         String answer = solveExpression(candidate);
-                        if (first.isEmpty()) first = candidate;
-                        if (!validSlotAnswer.isEmpty() && !validSlotAnswer.equals(answer)) conflictingAnswer = true;
-                        if (candidateIndex == 1 && validSlotAnswer.isEmpty()) {
-                            validSlotCandidate = candidate;
-                            validSlotAnswer = answer;
-                        }
-                        int count = counts.getOrDefault(answer, 0) + 1;
-                        counts.put(answer, count);
-                        if (count >= 2) return candidate;
+                        answersInVariant.add(answer);
+                        candidatesInVariant.putIfAbsent(answer, candidate);
                     } catch (Exception ignored) {
-                        // Only structurally valid answers vote in the consensus.
+                        // Only structurally valid candidates can vote.
                     }
                 }
+                // Whole-image and slot recognition from the same pixels are not
+                // independent votes. A preprocessing variant votes only when all
+                // of its valid candidates agree, and two distinct variants must
+                // agree before an answer may be submitted.
+                if (answersInVariant.size() == 1) {
+                    String answer = answersInVariant.iterator().next();
+                    String candidate = candidatesInVariant.get(answer);
+                    representativeCandidates.putIfAbsent(answer, candidate);
+                    int votes = variantVotes.getOrDefault(answer, 0) + 1;
+                    variantVotes.put(answer, votes);
+                    if (votes >= 2) return representativeCandidates.get(answer);
+                }
             }
-            if (!first.isEmpty() && Pattern.matches("[0-9]{4}", solveExpression(first))) return first;
-            // Slot recognition constrains the three regions to operand/operator/operand.
-            // A single complete slot result is usable when no other valid candidate
-            // produced a conflicting answer. This handles thin minus signs and faint
-            // right-hand digits that only survive one preprocessing variant.
-            if (!validSlotCandidate.isEmpty() && !conflictingAnswer && counts.size() == 1) {
-                return validSlotCandidate;
-            }
-            throw new Exception("PNG 验证码识别结果不一致：" + rawResults);
+            throw new Exception("PNG 验证码未得到跨图像版本的一致结果：" + rawResults);
         }
     }
 
