@@ -70,7 +70,12 @@ final class CheckInClient {
                     }
                     JSONObject captcha = new JSONObject(captchaResponse.body);
                     if (captcha.optInt("ret") != 1 || captcha.optString("svg").trim().isEmpty()) {
-                        throw new Exception("验证码获取失败：" + captcha.optString("msg", "服务端未返回验证码"));
+                        String captchaMessage = captcha.optString("msg", "服务端未返回验证码").trim();
+                        if (recognitionAttempt == 0) {
+                            DiagnosticLog.add(context, "captcha fetch rejected; refreshing once");
+                            continue;
+                        }
+                        throw new Exception("验证码获取失败：" + captchaMessage);
                     }
                     try {
                         code = CaptchaSolver.solve(context, captcha.getString("svg"));
@@ -96,7 +101,10 @@ final class CheckInClient {
                 JSONObject result = new JSONObject(resultResponse.body);
                 String message = result.optString("msg").trim();
                 if (result.optInt("ret") != 1 || !isConfirmedSuccess(message)) {
-                    if (submissionAttempt == 0 && isCaptchaRejected(message)) continue;
+                    if (submissionAttempt == 0 && isCaptchaRejected(message)) {
+                        DiagnosticLog.add(context, "captcha rejected; refreshing and retrying once");
+                        continue;
+                    }
                     throw new Exception(message.isEmpty() ? "签到未被服务端确认" : message);
                 }
                 return message;
@@ -269,7 +277,9 @@ final class CheckInClient {
 
     static boolean isCaptchaRejected(String message) {
         return message.contains("验证码") && (message.contains("错误")
-                || message.contains("不正确") || message.contains("失败"));
+                || message.contains("不正确") || message.contains("失败")
+                || message.contains("过期") || message.contains("超时")
+                || message.contains("刷新重试"));
     }
 
     private static final class Response {

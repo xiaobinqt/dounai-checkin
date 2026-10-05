@@ -32,6 +32,10 @@ public class CheckInWorker extends Worker {
             String day = shanghaiDay();
             DiagnosticLog.add(context, "check-in started source=" + source
                     + " attempt=" + getRunAttemptCount() + " " + DiagnosticLog.screenState(context));
+            if (automatic && !settings.getBoolean("auto_enabled", false)) {
+                DiagnosticLog.add(context, "check-in skipped; automatic check-in disabled");
+                return Result.success();
+            }
             if (automatic && day.equals(site.getString("last_auto_date", ""))) {
                 DiagnosticLog.add(context, "check-in skipped; automatic task already ran today");
                 if (settings.getBoolean("auto_enabled", false)) DailyScheduler.scheduleNext(context);

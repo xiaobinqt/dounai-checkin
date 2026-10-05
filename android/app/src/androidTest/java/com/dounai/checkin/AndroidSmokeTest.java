@@ -47,6 +47,8 @@ public class AndroidSmokeTest {
     public void onlyCaptchaRejectionsUseTheCaptchaRetry() {
         assertTrue(CheckInClient.isCaptchaRejected("验证码错误，还剩2次机会"));
         assertTrue(CheckInClient.isCaptchaRejected("验证码不正确"));
+        assertTrue(CheckInClient.isCaptchaRejected("验证码已过期，请刷新重试。"));
+        assertTrue(CheckInClient.isCaptchaRejected("验证码超时"));
         assertFalse(CheckInClient.isCaptchaRejected("页面凭据已过期或失效"));
         assertFalse(CheckInClient.isCaptchaRejected("网络连接中断"));
     }
