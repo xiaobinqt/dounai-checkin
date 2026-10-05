@@ -17,6 +17,7 @@ public class SessionRefreshWorker extends Worker {
     public Result doWork() {
         synchronized (CheckInWorker.RUN_LOCK) {
             Context context = getApplicationContext();
+            DiagnosticLog.add(context, "session refresh started " + DiagnosticLog.screenState(context));
             SharedPreferences settings = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
             SharedPreferences site = context.getSharedPreferences("site", Context.MODE_PRIVATE);
             if (!settings.getBoolean("auto_enabled", false)
@@ -45,6 +46,8 @@ public class SessionRefreshWorker extends Worker {
             }
             site.edit().putString("last_refresh_result", message)
                     .putLong("last_refresh_at", System.currentTimeMillis()).apply();
+            DiagnosticLog.add(context, "session refresh finished expired="
+                    + site.getBoolean("login_expired", false));
             return Result.success();
         }
     }

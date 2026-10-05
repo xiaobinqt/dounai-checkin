@@ -35,6 +35,11 @@ final class Notifications {
             Future<String> email = executor.submit(() -> channelError("邮件", () -> sendEmail(prefs, title, message)));
             String barkError = awaitChannel(bark, "Bark");
             String emailError = awaitChannel(email, "邮件");
+            DiagnosticLog.add(context, "notifications finished barkConfigured="
+                    + !prefs.getString("bark_key", "").trim().isEmpty()
+                    + " barkError=" + !barkError.isEmpty()
+                    + " emailConfigured=" + !prefs.getString("email", "").trim().isEmpty()
+                    + " emailError=" + !emailError.isEmpty());
             if (barkError.isEmpty()) return emailError;
             if (emailError.isEmpty()) return barkError;
             return barkError + "；" + emailError;

@@ -25,10 +25,18 @@ public class CheckInWorker extends Worker {
         synchronized (RUN_LOCK) {
             Context context = getApplicationContext();
             boolean automatic = getInputData().getBoolean("automatic", false);
+            String source = getInputData().getString("source");
+            if (source == null || source.isEmpty()) source = automatic ? "work" : "manual";
             SharedPreferences site = context.getSharedPreferences("site", Context.MODE_PRIVATE);
             SharedPreferences settings = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
             String day = shanghaiDay();
-            if (automatic && day.equals(site.getString("last_auto_date", ""))) return Result.success();
+            DiagnosticLog.add(context, "check-in started source=" + source
+                    + " attempt=" + getRunAttemptCount() + " " + DiagnosticLog.screenState(context));
+            if (automatic && day.equals(site.getString("last_auto_date", ""))) {
+                DiagnosticLog.add(context, "check-in skipped; automatic task already ran today");
+                if (settings.getBoolean("auto_enabled", false)) DailyScheduler.scheduleNext(context);
+                return Result.success();
+            }
             boolean success = false;
             boolean expired = false;
             String message;
@@ -48,6 +56,8 @@ public class CheckInWorker extends Worker {
                 if (automatic && error.isSafeToRetry() && getRunAttemptCount() < 3) {
                     site.edit().putString("last_result", "网络暂时不可用，后台签到将在稍后重试")
                             .putLong("last_run_at", System.currentTimeMillis()).apply();
+                    DiagnosticLog.add(context, "check-in network retry queued nextAttempt="
+                            + (getRunAttemptCount() + 1));
                     return Result.retry();
                 }
             } catch (Exception error) {
@@ -62,6 +72,8 @@ public class CheckInWorker extends Worker {
                     .putLong("last_run_at", System.currentTimeMillis()).apply();
             if (automatic) site.edit().putString("last_auto_date", day).apply();
             if (automatic && settings.getBoolean("auto_enabled", false)) DailyScheduler.scheduleNext(context);
+            DiagnosticLog.add(context, "check-in finished success=" + success
+                    + " sessionExpired=" + expired + " notificationError=" + !notificationError.isEmpty());
             return Result.success();
         }
     }

@@ -162,6 +162,7 @@ public class MainActivity extends Activity {
 
         findViewById(R.id.open_panel).setOnClickListener(v -> openPanel());
         findViewById(R.id.settings).setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+        findViewById(R.id.runtime_log).setOnClickListener(v -> startActivity(new Intent(this, LogActivity.class)));
         findViewById(R.id.checkin_now).setOnClickListener(v -> {
             DailyScheduler.checkInNow(this);
             lastResult.setText("已提交一次签到任务；稍后打开应用查看结果。");
@@ -183,6 +184,8 @@ public class MainActivity extends Activity {
             webView.restoreState(savedInstanceState);
         }
         setBrowserMode(savedInstanceState != null && savedInstanceState.getBoolean("browser_mode"));
+        DiagnosticLog.add(this, "app opened " + DiagnosticLog.screenState(this));
+        DailyScheduler.ensureAlarm(this);
     }
 
     private void openPanel() {

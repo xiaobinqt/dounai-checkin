@@ -67,6 +67,12 @@
     </LinearLayout>
 
     <Button
+        android:id="@+id/runtime_log"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="运行日志" />
+
+    <Button
         android:id="@+id/logout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
