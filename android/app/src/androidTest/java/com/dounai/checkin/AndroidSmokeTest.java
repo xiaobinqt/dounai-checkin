@@ -20,6 +20,8 @@ import org.junit.runner.RunWith;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 @RunWith(AndroidJUnit4.class)
 public class AndroidSmokeTest {
@@ -73,6 +75,33 @@ public class AndroidSmokeTest {
         String markup = "data:image/png;base64,"
                 + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
         assertEquals("4", CaptchaSolver.solve(context, markup));
+    }
+
+    @Test
+    public void captchaConsensusRequiresUniqueWinner() {
+        Map<String, Integer> clearWinner = new HashMap<>();
+        clearWinner.put("4", 3);
+        clearWinner.put("5", 1);
+        assertEquals("4", CaptchaSolver.uniqueBestAnswer(clearWinner));
+
+        Map<String, Integer> tie = new HashMap<>();
+        tie.put("4", 2);
+        tie.put("5", 2);
+        assertEquals(null, CaptchaSolver.uniqueBestAnswer(tie));
+    }
+
+    @Test
+    public void adaptiveThresholdIsDerivedFromCaptchaPixels() throws Exception {
+        Bitmap bitmap;
+        try (InputStream input = InstrumentationRegistry.getInstrumentation().getContext()
+                .getAssets().open("captcha-six-minus-two.png")) {
+            bitmap = android.graphics.BitmapFactory.decodeStream(input);
+        }
+        assertNotNull(bitmap);
+        int threshold = CaptchaSolver.otsuThreshold(bitmap);
+        assertTrue(threshold > 0);
+        assertTrue(threshold < 255);
+        bitmap.recycle();
     }
 
     @Test

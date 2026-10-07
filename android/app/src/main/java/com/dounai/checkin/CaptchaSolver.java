@@ -8,10 +8,14 @@ import android.util.Xml;
 
 import org.xmlpull.v1.XmlPullParser;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,44 +76,97 @@ final class CaptchaSolver {
             Map<String, Integer> variantVotes = new HashMap<>();
             Map<String, String> representativeCandidates = new HashMap<>();
             List<String> rawResults = new ArrayList<>();
-            Bitmap[] variants = {bitmap, highContrast(bitmap, 90), highContrast(bitmap, 120)};
-            for (int variantIndex = 0; variantIndex < variants.length; variantIndex++) {
-                Bitmap variant = variants[variantIndex];
-                String whole = recognizer.classify(variant, ALL);
-                String slots;
-                try {
-                    slots = recognizeSlots(recognizer, variant);
-                } catch (Exception error) {
-                    slots = "";
-                }
-                String[] candidates = {whole, slots};
-                Set<String> answersInVariant = new HashSet<>();
-                Map<String, String> candidatesInVariant = new HashMap<>();
-                for (String candidate : candidates) {
-                    if (!candidate.isEmpty()) rawResults.add(candidate);
+            List<Bitmap> variants = imageVariants(bitmap);
+            try {
+                for (int variantIndex = 0; variantIndex < variants.size(); variantIndex++) {
+                    Bitmap variant = variants.get(variantIndex);
+                    String whole = recognizer.classify(variant, ALL);
+                    String slots;
                     try {
-                        String answer = solveExpression(candidate);
-                        answersInVariant.add(answer);
-                        candidatesInVariant.putIfAbsent(answer, candidate);
-                    } catch (Exception ignored) {
-                        // Only structurally valid candidates can vote.
+                        slots = recognizeSlots(recognizer, variant);
+                    } catch (Exception error) {
+                        slots = "";
+                    }
+                    String[] candidates = {whole, slots};
+                    Set<String> answersInVariant = new HashSet<>();
+                    Map<String, String> candidatesInVariant = new HashMap<>();
+                    for (String candidate : candidates) {
+                        if (!candidate.isEmpty()) rawResults.add("v" + variantIndex + ":" + compact(candidate));
+                        try {
+                            String answer = solveExpression(candidate);
+                            answersInVariant.add(answer);
+                            candidatesInVariant.putIfAbsent(answer, candidate);
+                        } catch (Exception ignored) {
+                            // Only structurally valid candidates can vote.
+                        }
+                    }
+                    // Whole-image and slot recognition from the same pixels are not
+                    // independent votes. A preprocessing variant votes only when all
+                    // of its valid candidates agree.
+                    if (answersInVariant.size() == 1) {
+                        String answer = answersInVariant.iterator().next();
+                        representativeCandidates.putIfAbsent(answer, candidatesInVariant.get(answer));
+                        variantVotes.put(answer, variantVotes.getOrDefault(answer, 0) + 1);
                     }
                 }
-                // Whole-image and slot recognition from the same pixels are not
-                // independent votes. A preprocessing variant votes only when all
-                // of its valid candidates agree, and two distinct variants must
-                // agree before an answer may be submitted.
-                if (answersInVariant.size() == 1) {
-                    String answer = answersInVariant.iterator().next();
-                    String candidate = candidatesInVariant.get(answer);
-                    representativeCandidates.putIfAbsent(answer, candidate);
-                    int votes = variantVotes.getOrDefault(answer, 0) + 1;
-                    variantVotes.put(answer, votes);
-                    if (votes >= 2) return representativeCandidates.get(answer);
+            } finally {
+                for (Bitmap variant : variants) {
+                    if (variant != bitmap) variant.recycle();
                 }
             }
+            String accepted = uniqueBestAnswer(variantVotes);
+            if (accepted != null && variantVotes.get(accepted) >= 2) {
+                DiagnosticLog.add(context, "captcha recognition accepted votes="
+                        + variantVotes.get(accepted) + "/" + variants.size());
+                return representativeCandidates.get(accepted);
+            }
+            saveFailure(context, bitmap, rawResults);
+            DiagnosticLog.add(context, "captcha recognition rejected variants=" + variants.size()
+                    + " candidates=" + compact(rawResults.toString()));
             throw new Exception("PNG 验证码未得到跨图像版本的一致结果：" + rawResults);
         }
+    }
+
+    private static List<Bitmap> imageVariants(Bitmap original) {
+        List<Bitmap> variants = new ArrayList<>();
+        Set<Long> fingerprints = new LinkedHashSet<>();
+        addVariant(variants, fingerprints, original);
+        int threshold = otsuThreshold(original);
+        for (int offset : new int[]{-28, 0, 28}) {
+            Bitmap variant = highContrast(original, Math.max(24, Math.min(231, threshold + offset)));
+            if (!addVariant(variants, fingerprints, variant)) variant.recycle();
+        }
+        return variants;
+    }
+
+    private static boolean addVariant(List<Bitmap> variants, Set<Long> fingerprints, Bitmap bitmap) {
+        if (!fingerprints.add(fingerprint(bitmap))) return false;
+        variants.add(bitmap);
+        return true;
+    }
+
+    private static long fingerprint(Bitmap bitmap) {
+        int width = bitmap.getWidth(), height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+        long hash = 0xcbf29ce484222325L;
+        for (int pixel : pixels) {
+            hash ^= pixel;
+            hash *= 0x100000001b3L;
+        }
+        return hash ^ ((long) width << 32) ^ height;
+    }
+
+    static String uniqueBestAnswer(Map<String, Integer> votes) {
+        if (votes.isEmpty()) return null;
+        int bestVotes = Collections.max(votes.values());
+        String best = null;
+        for (Map.Entry<String, Integer> entry : votes.entrySet()) {
+            if (entry.getValue() != bestVotes) continue;
+            if (best != null) return null;
+            best = entry.getKey();
+        }
+        return best;
     }
 
     private static String recognizeSlots(OnnxCaptchaRecognizer recognizer, Bitmap bitmap) throws Exception {
@@ -135,13 +192,74 @@ final class CaptchaSolver {
         int[] pixels = new int[width * height];
         original.getPixels(pixels, 0, width, 0, 0, width, height);
         for (int i = 0; i < pixels.length; i++) {
-            int pixel = pixels[i];
-            int brightest = Math.max((pixel >> 16) & 255, Math.max((pixel >> 8) & 255, pixel & 255));
-            pixels[i] = brightest >= threshold ? 0xffffffff : 0xff000000;
+            pixels[i] = luminance(pixels[i]) >= threshold ? 0xffffffff : 0xff000000;
         }
         Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         result.setPixels(pixels, 0, width, 0, 0, width, height);
         return result;
+    }
+
+    static int otsuThreshold(Bitmap bitmap) {
+        int width = bitmap.getWidth(), height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        int[] histogram = new int[256];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+        for (int pixel : pixels) histogram[luminance(pixel)]++;
+        long totalSum = 0;
+        for (int i = 0; i < histogram.length; i++) totalSum += (long) i * histogram[i];
+        long backgroundSum = 0;
+        int backgroundWeight = 0;
+        double bestVariance = -1;
+        int bestThreshold = 127;
+        for (int threshold = 0; threshold < 255; threshold++) {
+            backgroundWeight += histogram[threshold];
+            if (backgroundWeight == 0) continue;
+            int foregroundWeight = pixels.length - backgroundWeight;
+            if (foregroundWeight == 0) break;
+            backgroundSum += (long) threshold * histogram[threshold];
+            double backgroundMean = (double) backgroundSum / backgroundWeight;
+            double foregroundMean = (double) (totalSum - backgroundSum) / foregroundWeight;
+            double difference = backgroundMean - foregroundMean;
+            double variance = (double) backgroundWeight * foregroundWeight * difference * difference;
+            if (variance > bestVariance) {
+                bestVariance = variance;
+                bestThreshold = threshold;
+            }
+        }
+        return bestThreshold;
+    }
+
+    private static int luminance(int pixel) {
+        int alpha = (pixel >>> 24) & 255;
+        int red = (pixel >>> 16) & 255;
+        int green = (pixel >>> 8) & 255;
+        int blue = pixel & 255;
+        if (alpha < 255) {
+            red = (red * alpha + 255 * (255 - alpha)) / 255;
+            green = (green * alpha + 255 * (255 - alpha)) / 255;
+            blue = (blue * alpha + 255 * (255 - alpha)) / 255;
+        }
+        return (77 * red + 150 * green + 29 * blue) >> 8;
+    }
+
+    private static void saveFailure(Context context, Bitmap bitmap, List<String> candidates) {
+        File directory = new File(context.getFilesDir(), "captcha-diagnostics");
+        try {
+            if (!directory.exists() && !directory.mkdirs()) return;
+            try (FileOutputStream image = new FileOutputStream(new File(directory, "last-failure.png"))) {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, image);
+            }
+            try (FileOutputStream metadata = new FileOutputStream(new File(directory, "last-failure.txt"))) {
+                metadata.write(compact(candidates.toString()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        } catch (Exception ignored) {
+            // Captcha diagnostics must never interrupt a check-in task.
+        }
+    }
+
+    private static String compact(String value) {
+        String clean = value == null ? "" : value.replace('\n', ' ').replace('\r', ' ');
+        return clean.length() <= 240 ? clean : clean.substring(0, 240);
     }
 
     static String solveExpression(String raw) throws Exception {

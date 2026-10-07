@@ -62,14 +62,19 @@ final class OnnxCaptchaRecognizer implements AutoCloseable {
     }
 
     String classify(Bitmap bitmap, String allowed) throws Exception {
-        return classify(bitmap, allowed, false);
+        return recognize(bitmap, allowed).text;
     }
 
     String classifySingle(Bitmap bitmap, String allowed) throws Exception {
-        return classify(bitmap, allowed, true);
+        Recognition recognition = recognize(bitmap, allowed);
+        int characters = recognition.text.codePointCount(0, recognition.text.length());
+        if (characters == 1) return recognition.text;
+        // A thin operator can lose every CTC timestep to the blank class. Preserve
+        // the strongest non-blank fallback only when CTC produced no competing text.
+        return characters == 0 ? recognition.strongestSingle : "";
     }
 
-    private String classify(Bitmap bitmap, String allowed, boolean requireSingleCharacter) throws Exception {
+    private Recognition recognize(Bitmap bitmap, String allowed) throws Exception {
         int height = 64;
         int width = Math.max(1, bitmap.getWidth() * height / bitmap.getHeight());
         Bitmap resized = Bitmap.createScaledBitmap(bitmap, width, height, true);
@@ -98,24 +103,10 @@ final class OnnxCaptchaRecognizer implements AutoCloseable {
             for (int i = 1; i < charsets.length; i++) {
                 if (!charsets[i].isEmpty() && allowed.contains(charsets[i])) allowedIndices.add(i);
             }
-            if (requireSingleCharacter) {
-                int best = -1;
-                float bestScore = -Float.MAX_VALUE;
-                for (int t = 0; t < timesteps; t++) {
-                    int offset = t * batch * classes;
-                    for (int index : allowedIndices) {
-                        if (index <= 0 || index >= classes) continue;
-                        float score = scores.get(offset + index);
-                        if (score > bestScore) {
-                            bestScore = score;
-                            best = index;
-                        }
-                    }
-                }
-                return best > 0 && best < charsets.length ? charsets[best] : "";
-            }
             StringBuilder text = new StringBuilder();
             int previous = -1;
+            int strongest = -1;
+            float strongestScore = -Float.MAX_VALUE;
             for (int t = 0; t < timesteps; t++) {
                 int offset = t * batch * classes;
                 int best = 0;
@@ -123,6 +114,10 @@ final class OnnxCaptchaRecognizer implements AutoCloseable {
                 for (int index : allowedIndices) {
                     if (index >= classes) continue;
                     float score = scores.get(offset + index);
+                    if (index > 0 && score > strongestScore) {
+                        strongestScore = score;
+                        strongest = index;
+                    }
                     if (score > bestScore) {
                         bestScore = score;
                         best = index;
@@ -131,7 +126,18 @@ final class OnnxCaptchaRecognizer implements AutoCloseable {
                 if (best != previous && best > 0 && best < charsets.length) text.append(charsets[best]);
                 previous = best;
             }
-            return text.toString().trim();
+            String strongestSingle = strongest > 0 && strongest < charsets.length ? charsets[strongest] : "";
+            return new Recognition(text.toString().trim(), strongestSingle);
+        }
+    }
+
+    private static final class Recognition {
+        final String text;
+        final String strongestSingle;
+
+        Recognition(String text, String strongestSingle) {
+            this.text = text;
+            this.strongestSingle = strongestSingle;
         }
     }
 
