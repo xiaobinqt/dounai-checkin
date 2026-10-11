@@ -66,7 +66,8 @@ final class DailyScheduler {
         long delay = triggerAt - System.currentTimeMillis();
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(CheckInWorker.class)
                 .addTag(WORK_TAG)
-                .setInputData(new Data.Builder().putBoolean("automatic", true).build())
+                .setInputData(new Data.Builder().putBoolean("automatic", true)
+                        .putLong("planned_at", triggerAt).build())
                 .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                 .setBackoffCriteria(androidx.work.BackoffPolicy.LINEAR, 5, TimeUnit.MINUTES)
                 .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -74,7 +75,7 @@ final class DailyScheduler {
         manager.enqueueUniqueWork(WORK_NAME, policy, request);
         String alarmMode = scheduleAlarm(context, triggerAt);
         DiagnosticLog.add(context, "daily scheduled target=" + format(triggerAt)
-                + " workPolicy=" + policy + " alarm=" + alarmMode);
+                + " workPolicy=" + policy + " alarm=" + alarmMode + " id=" + request.getId());
     }
 
     static void checkInNow(Context context) {
@@ -90,6 +91,7 @@ final class DailyScheduler {
     static void onAlarm(Context context) {
         SharedPreferences prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
         DiagnosticLog.add(context, "daily alarm received " + DiagnosticLog.screenState(context));
+        DiagnosticState.capture(context, "alarm-received");
         if (!prefs.getBoolean("auto_enabled", false)) {
             DiagnosticLog.add(context, "daily alarm ignored; automatic check-in disabled");
             cancelAlarm(context);
@@ -109,7 +111,8 @@ final class DailyScheduler {
                 ALARM_WORK_PREFIX + day, ExistingWorkPolicy.KEEP, request);
         long next = nextTrigger(prefs);
         String mode = scheduleAlarm(context, next);
-        DiagnosticLog.add(context, "alarm check-in queued; next=" + format(next) + " alarm=" + mode);
+        DiagnosticLog.add(context, "alarm check-in queued; next=" + format(next) + " alarm=" + mode
+                + " requestedId=" + request.getId() + " policy=KEEP");
     }
 
     static void cancel(Context context) {

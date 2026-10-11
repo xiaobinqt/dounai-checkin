@@ -185,6 +185,7 @@ public class MainActivity extends Activity {
         }
         setBrowserMode(savedInstanceState != null && savedInstanceState.getBoolean("browser_mode"));
         DiagnosticLog.add(this, "app opened " + DiagnosticLog.screenState(this));
+        DiagnosticState.capture(this, "app-open-before-alarm-restore");
         DailyScheduler.ensureAlarm(this);
     }
 

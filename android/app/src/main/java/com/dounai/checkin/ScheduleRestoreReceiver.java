@@ -9,6 +9,7 @@ public class ScheduleRestoreReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         String action = intent == null ? "unknown" : intent.getAction();
         DiagnosticLog.add(context, "schedule restore action=" + action);
+        DiagnosticState.capture(context, "restore-broadcast");
         DailyScheduler.restore(context);
         BatteryMonitorScheduler.schedule(context);
     }

@@ -22,6 +22,8 @@ public class CheckInWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        long enteredAt = android.os.SystemClock.elapsedRealtime();
+        DiagnosticLog.add(getApplicationContext(), "check-in worker entered id=" + getId());
         synchronized (RUN_LOCK) {
             Context context = getApplicationContext();
             boolean automatic = getInputData().getBoolean("automatic", false);
@@ -30,6 +32,10 @@ public class CheckInWorker extends Worker {
             SharedPreferences site = context.getSharedPreferences("site", Context.MODE_PRIVATE);
             SharedPreferences settings = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
             String day = shanghaiDay();
+            DiagnosticLog.add(context, "check-in worker acquired id=" + getId()
+                    + " lockWaitMs=" + (android.os.SystemClock.elapsedRealtime() - enteredAt)
+                    + " plannedAt=" + getInputData().getLong("planned_at", 0));
+            DiagnosticState.capture(context, "check-in-start");
             DiagnosticLog.add(context, "check-in started source=" + source
                     + " attempt=" + getRunAttemptCount() + " " + DiagnosticLog.screenState(context));
             if (automatic && !settings.getBoolean("auto_enabled", false)) {
@@ -53,9 +59,11 @@ public class CheckInWorker extends Worker {
                 message = new CheckInClient(context, url, cookie).checkIn();
                 success = true;
             } catch (CheckInClient.SessionExpiredException error) {
+                DiagnosticLog.add(context, "check-in failure category=session-expired");
                 expired = true;
                 message = error.getMessage();
             } catch (CheckInClient.NetworkException error) {
+                DiagnosticLog.add(context, "check-in failure category=network safeToRetry=" + error.isSafeToRetry());
                 message = error.getMessage();
                 if (automatic && error.isSafeToRetry() && getRunAttemptCount() < 3) {
                     site.edit().putString("last_result", "网络暂时不可用，后台签到将在稍后重试")
@@ -65,9 +73,11 @@ public class CheckInWorker extends Worker {
                     return Result.retry();
                 }
             } catch (Exception error) {
+                DiagnosticLog.add(context, "check-in failure category=other type=" + error.getClass().getSimpleName());
                 message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
             if (success) SessionState.restored(context);
+            DiagnosticLog.add(context, "check-in request completed success=" + success + "; notifications starting");
             String notificationError = expired ? SessionState.expired(context)
                     : Notifications.send(context, success, message);
             String result = (success ? "成功：" : "失败：") + message;
@@ -80,6 +90,12 @@ public class CheckInWorker extends Worker {
                     + " sessionExpired=" + expired + " notificationError=" + !notificationError.isEmpty());
             return Result.success();
         }
+    }
+
+    @Override
+    public void onStopped() {
+        DiagnosticLog.add(getApplicationContext(), "check-in worker stopped id=" + getId());
+        super.onStopped();
     }
 
     private static String shanghaiDay() {

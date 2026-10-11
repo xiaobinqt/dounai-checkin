@@ -63,6 +63,7 @@ public class LogActivity extends Activity {
     }
 
     private void refresh() {
+        DiagnosticState.capture(this, "log-view-refresh");
         logView.setText(DiagnosticLog.read(this));
     }
 

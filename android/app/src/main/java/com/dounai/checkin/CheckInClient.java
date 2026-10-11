@@ -57,14 +57,20 @@ final class CheckInClient {
                 String code = "";
                 Exception lastRecognitionError = null;
                 for (int recognitionAttempt = 0; recognitionAttempt < 2; recognitionAttempt++) {
+                    DiagnosticLog.add(context, "check-in stage=panel submissionAttempt=" + submissionAttempt
+                            + " recognitionAttempt=" + recognitionAttempt);
                     Response panel = request("GET", "/user/panel", null);
+                    DiagnosticLog.add(context, "check-in panel HTTP=" + panel.status);
                     requireAuthenticated(panel);
                     ticket = extractCheckInTicket(panel.body);
                     if (ticket.isEmpty()) {
+                        DiagnosticLog.add(context, "check-in failure category=missing-ticket");
                         throw new Exception("签到页面未返回人机校验票据，请在网页中手动签到");
                     }
 
+                    DiagnosticLog.add(context, "check-in stage=captcha-fetch");
                     Response captchaResponse = request("GET", "/auth/captcha?type=checkin&_=" + System.currentTimeMillis(), null);
+                    DiagnosticLog.add(context, "check-in captcha HTTP=" + captchaResponse.status);
                     if (captchaResponse.status < 200 || captchaResponse.status >= 300) {
                         throw new Exception("验证码接口返回 HTTP " + captchaResponse.status);
                     }
@@ -86,6 +92,7 @@ final class CheckInClient {
                     }
                 }
                 if (lastRecognitionError != null || code.isEmpty()) {
+                    DiagnosticLog.add(context, "check-in failure category=captcha-unrecognized");
                     throw new Exception("两张验证码均无法可靠识别，已停止提交以保护剩余签到机会",
                             lastRecognitionError);
                 }
@@ -96,11 +103,15 @@ final class CheckInClient {
                 String body = "captcha_code=" + encode(code)
                         + "&checkin_secret=&checkin_ticket=" + encode(ticket)
                         + "&checkin_token=" + encode(token);
+                DiagnosticLog.add(context, "check-in stage=submit");
                 Response resultResponse = request("POST", "/user/checkin", body);
+                DiagnosticLog.add(context, "check-in submit HTTP=" + resultResponse.status);
                 requireAuthenticated(resultResponse);
                 JSONObject result = new JSONObject(resultResponse.body);
                 String message = result.optString("msg").trim();
                 if (result.optInt("ret") != 1 || !isConfirmedSuccess(message)) {
+                    DiagnosticLog.add(context, "check-in failure category=server-rejected captchaRejected="
+                            + isCaptchaRejected(message));
                     if (submissionAttempt == 0 && isCaptchaRejected(message)) {
                         DiagnosticLog.add(context, "captcha rejected; refreshing and retrying once");
                         continue;

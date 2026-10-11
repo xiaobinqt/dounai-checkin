@@ -14,12 +14,13 @@ import java.util.TimeZone;
 
 final class DiagnosticLog {
     private static final String FILE_NAME = "runtime.log";
-    private static final int MAX_BYTES = 96 * 1024;
-    private static final int KEEP_BYTES = 64 * 1024;
+    private static final int MAX_BYTES = 512 * 1024;
+    private static final int KEEP_BYTES = 384 * 1024;
 
     static synchronized void add(Context context, String event) {
         String clean = event == null ? "unknown" : event.replace('\n', ' ').replace('\r', ' ');
-        String line = timestamp() + " " + clean + "\n";
+        String line = timestamp() + " elapsedMs=" + android.os.SystemClock.elapsedRealtime()
+                + " pid=" + android.os.Process.myPid() + " " + clean + "\n";
         File file = new File(context.getFilesDir(), FILE_NAME);
         try {
             if (file.length() > MAX_BYTES) trim(file);
