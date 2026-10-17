@@ -1,17 +1,6 @@
 import Foundation
-import UIKit
+import ImageIO
 import Vision
-
-enum CheckInError: LocalizedError {
-    case message(String)
-    case sessionExpired(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .message(let text), .sessionExpired(let text): return text
-        }
-    }
-}
 
 enum CaptchaSolver {
     private static let replacements: [(String, String)] = [
@@ -31,10 +20,10 @@ enum CaptchaSolver {
         if markup.range(of: "<svg", options: .caseInsensitive) != nil {
             return try evaluate(try SVGTextParser.text(from: markup))
         }
-        guard let expression = try await recognizeImage(in: markup) else {
-            throw CheckInError.message("验证码图片无法识别")
+        guard let answer = try await recognizeImage(in: markup) else {
+            throw CheckInError.message("验证码无法得到可靠的识别共识，已停止提交")
         }
-        return try evaluate(expression)
+        return answer
     }
 
     static func evaluate(_ raw: String) throws -> String {
@@ -73,23 +62,98 @@ enum CaptchaSolver {
         let range = NSRange(markup.startIndex..., in: markup)
         guard let match = regex.firstMatch(in: markup, range: range),
               let valueRange = Range(match.range(at: 1), in: markup),
-              let data = Data(base64Encoded: String(markup[valueRange])),
-              let image = UIImage(data: data), let cgImage = image.cgImage else { return nil }
+              let data = Data(base64Encoded: String(markup[valueRange])), data.count <= 2 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              cgImage.width <= 1024, cgImage.height <= 1024 else { return nil }
 
-        return try await Task.detached(priority: .userInitiated) {
-            var candidates: [String] = []
-            let request = VNRecognizeTextRequest { request, _ in
-                let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                candidates = observations.compactMap { $0.topCandidates(3).first?.string }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.usesLanguageCorrection = false
+        let operation = Task.detached(priority: .userInitiated) { () throws -> String? in
+            var votes: [String: Int] = [:]
+            let images = try variants(cgImage)
+            for image in images {
+                try Task.checkCancellation()
+                try VNImageRequestHandler(cgImage: image).perform([request])
+                let observations = request.results ?? []
+                let joined = observations.compactMap { $0.topCandidates(1).first?.string }.joined()
+                var candidates = [joined]
+                if observations.count == 1 {
+                    candidates += observations[0].topCandidates(3).filter { $0.confidence >= 0.4 }.map(\.string)
+                }
+                // A variant casts at most one vote; conflicting answers cast none.
+                let answers = Set(candidates.compactMap { try? evaluate($0) })
+                if answers.count == 1, let answer = answers.first { votes[answer, default: 0] += 1 }
             }
-            request.recognitionLevel = .accurate
-            request.recognitionLanguages = ["zh-Hans", "en-US"]
-            request.usesLanguageCorrection = false
-            try VNImageRequestHandler(cgImage: cgImage).perform([request])
-            let joined = candidates.joined()
-            if (try? evaluate(joined)) != nil { return joined }
-            return candidates.first { (try? evaluate($0)) != nil }
-        }.value
+            let answer = CheckInPolicy.consensus(votes)
+            DiagnosticLog.add("captcha variants=\(images.count) agreeingVariants=\(votes.values.max() ?? 0) accepted=\(answer != nil)")
+            return answer
+        }
+        return try await withTaskCancellationHandler {
+            let result = try await operation.value
+            try Task.checkCancellation()
+            return result
+        } onCancel: {
+            request.cancel()
+            operation.cancel()
+        }
+    }
+
+    private static func variants(_ image: CGImage) throws -> [CGImage] {
+        let width = image.width * 3, height = image.height * 3
+        var pixels = [UInt8](repeating: 255, count: width * height)
+        let drawn = pixels.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: width, height: height,
+                                          bitsPerComponent: 8, bytesPerRow: width,
+                                          space: CGColorSpaceCreateDeviceGray(), bitmapInfo: 0) else { return false }
+            context.setFillColor(gray: 1, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.interpolationQuality = .high
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { throw CheckInError.message("验证码预处理失败") }
+        // Vision works more reliably with dark text on a light background.
+        if pixels.reduce(0, { $0 + Int($1) }) / pixels.count < 128 {
+            pixels = pixels.map { 255 - $0 }
+        }
+        var histogram = [Int](repeating: 0, count: 256)
+        for pixel in pixels { histogram[Int(pixel)] += 1 }
+        let total = pixels.count
+        let sum = histogram.enumerated().reduce(0.0) { $0 + Double($1.offset * $1.element) }
+        var count = 0, partial = 0.0, best = -1.0, threshold = 127
+        for index in 0..<255 {
+            count += histogram[index]
+            partial += Double(index * histogram[index])
+            guard count > 0, count < total else { continue }
+            let difference = partial / Double(count) - (sum - partial) / Double(total - count)
+            let score = Double(count) * Double(total - count) * difference * difference
+            if score > best { best = score; threshold = index }
+        }
+        var seen = Set<Data>()
+        var result: [CGImage] = []
+        let versions = [pixels] + [-20, 0, 20].map { offset in
+            pixels.map { Int($0) <= max(0, min(254, threshold + offset)) ? UInt8(0) : UInt8(255) }
+        }
+        for version in versions {
+            let data = Data(version)
+            guard seen.insert(data).inserted else { continue }
+            let paddedWidth = width + 48, paddedHeight = height + 48
+            var padded = [UInt8](repeating: 255, count: paddedWidth * paddedHeight)
+            for row in 0..<height {
+                padded.replaceSubrange(((row + 24) * paddedWidth + 24)..<((row + 24) * paddedWidth + 24 + width),
+                                       with: version[(row * width)..<((row + 1) * width)])
+            }
+            guard let provider = CGDataProvider(data: Data(padded) as CFData),
+                  let variant = CGImage(width: paddedWidth, height: paddedHeight, bitsPerComponent: 8, bitsPerPixel: 8,
+                                        bytesPerRow: paddedWidth, space: CGColorSpaceCreateDeviceGray(),
+                                        bitmapInfo: CGBitmapInfo(rawValue: 0), provider: provider,
+                                        decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { continue }
+            result.append(variant)
+        }
+        return result
     }
 }
 

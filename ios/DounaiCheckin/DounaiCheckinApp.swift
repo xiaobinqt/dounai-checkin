@@ -7,6 +7,7 @@ struct DounaiCheckinApp: App {
 
     init() {
         BackgroundScheduler.register()
+        DiagnosticLog.add("app process started")
     }
 
     var body: some Scene {
@@ -16,7 +17,12 @@ struct DounaiCheckinApp: App {
         }
         .onChange(of: scenePhase) { phase in
             if phase == .background {
+                DiagnosticLog.add("app entered background")
                 settings.save()
+                BackgroundScheduler.scheduleNext(AppSettingsSnapshot(settings))
+            } else if phase == .active {
+                settings.reloadResult()
+                BackgroundScheduler.capture(reason: "app-active-before-restore")
                 BackgroundScheduler.scheduleNext(AppSettingsSnapshot(settings))
             }
         }

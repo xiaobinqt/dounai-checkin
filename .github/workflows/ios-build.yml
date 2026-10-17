@@ -19,6 +19,18 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
+      - name: Test SMTP delivery flow
+        run: |
+          xcrun swiftc -swift-version 5 -parse-as-library \
+            ios/DounaiCheckin/EmailClient.swift ios/Tests/EmailClientTests.swift \
+            -o /tmp/dounai-email-tests
+          /tmp/dounai-email-tests
+      - name: Test check-in retry and scheduling policies
+        run: |
+          xcrun swiftc -swift-version 5 -parse-as-library \
+            ios/DounaiCheckin/{CheckInPolicy,DiagnosticLog,CaptchaSolver,CheckInClient,AppSettings,KeychainStore,BarkClient,EmailClient}.swift \
+            ios/Tests/CheckInTests.swift -o /tmp/dounai-checkin-tests
+          /tmp/dounai-checkin-tests
       - name: Build for iOS Simulator
         run: |
           set -o pipefail

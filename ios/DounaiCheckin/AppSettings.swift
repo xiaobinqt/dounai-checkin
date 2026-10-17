@@ -8,7 +8,14 @@ final class AppSettings: ObservableObject {
     @Published var checkInTime: String
     @Published var barkServer: String
     @Published var barkKey: String
+    @Published var emailEnabled: Bool
+    @Published var emailAddress: String
+    @Published var emailRecipient: String
+    @Published var emailHost: String
+    @Published var emailPort: Int
+    @Published var emailPassword: String
     @Published var lastResult: String
+    @Published var lastResultAt: Date?
     @Published var userAgent: String
 
     private let defaults = UserDefaults.standard
@@ -19,7 +26,14 @@ final class AppSettings: ObservableObject {
         checkInTime = defaults.string(forKey: "checkin_time") ?? "09:17"
         barkServer = defaults.string(forKey: "bark_server") ?? "https://api.day.app"
         barkKey = KeychainStore.read("bark_key")
-        lastResult = defaults.string(forKey: "last_result") ?? "尚无签到记录"
+        emailEnabled = defaults.bool(forKey: "email_enabled")
+        emailAddress = defaults.string(forKey: "email_address") ?? ""
+        emailRecipient = defaults.string(forKey: "email_recipient") ?? ""
+        emailHost = defaults.string(forKey: "email_host") ?? ""
+        emailPort = defaults.object(forKey: "email_port") as? Int ?? 465
+        emailPassword = KeychainStore.read("email_password")
+        lastResult = defaults.string(forKey: "last_checkin_result") ?? defaults.string(forKey: "last_result") ?? "尚无签到记录"
+        lastResultAt = defaults.object(forKey: "last_checkin_at") as? Date ?? defaults.object(forKey: "last_result_at") as? Date
         userAgent = defaults.string(forKey: "user_agent") ?? AppSettings.defaultUserAgent
     }
 
@@ -34,16 +48,42 @@ final class AppSettings: ObservableObject {
         defaults.set(checkInTime, forKey: "checkin_time")
         defaults.set(barkServer.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "bark_server")
         KeychainStore.write(barkKey.trimmingCharacters(in: .whitespacesAndNewlines), for: "bark_key")
+        defaults.set(emailEnabled, forKey: "email_enabled")
+        defaults.set(emailAddress.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "email_address")
+        defaults.set(emailRecipient.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "email_recipient")
+        defaults.set(emailHost.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "email_host")
+        defaults.set(emailPort, forKey: "email_port")
+        KeychainStore.write(emailPassword, for: "email_password")
         defaults.set(userAgent, forKey: "user_agent")
     }
 
     func updateResult(_ result: String) {
         lastResult = result
+        lastResultAt = Date()
+        defaults.set(result, forKey: "last_checkin_result")
+        defaults.set(lastResultAt, forKey: "last_checkin_at")
         defaults.set(result, forKey: "last_result")
         defaults.set(Date(), forKey: "last_result_at")
     }
 
+    var hasSucceededToday: Bool {
+        defaults.string(forKey: "last_success_day") == CheckInPolicy.day()
+            && defaults.string(forKey: "last_success_site") == siteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func reloadResult() {
+        lastResult = defaults.string(forKey: "last_checkin_result") ?? defaults.string(forKey: "last_result") ?? "尚无签到记录"
+        lastResultAt = defaults.object(forKey: "last_checkin_at") as? Date ?? defaults.object(forKey: "last_result_at") as? Date
+    }
+
     func logout() {
+        defaults.removeObject(forKey: "uncertain_submission_day")
+        defaults.removeObject(forKey: "uncertain_submission_site")
+        defaults.removeObject(forKey: "last_success_day")
+        defaults.removeObject(forKey: "last_success_site")
+        defaults.removeObject(forKey: "auto_failure_day")
+        defaults.removeObject(forKey: "network_retry_day")
+        defaults.removeObject(forKey: "network_retry_count")
         automaticEnabled = false
         defaults.set(false, forKey: "automatic_enabled")
         KeychainStore.delete("site_cookie")

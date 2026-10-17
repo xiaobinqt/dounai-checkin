@@ -13,4 +13,5 @@
 /android/build/
 /ios/DerivedData/
 /ios/*.xcodeproj/xcuserdata/
+/ios/*.xcodeproj/project.xcworkspace/xcuserdata/
 /ios/*.xcworkspace/xcuserdata/

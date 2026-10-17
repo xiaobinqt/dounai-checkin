@@ -40,6 +40,7 @@ struct AppSettingsSnapshot: Sendable {
     let barkServer: String
     let barkKey: String
     let userAgent: String
+    let email: EmailConfiguration
 
     @MainActor
     init(_ settings: AppSettings) {
@@ -50,6 +51,12 @@ struct AppSettingsSnapshot: Sendable {
         barkServer = settings.barkServer.trimmingCharacters(in: .whitespacesAndNewlines)
         barkKey = settings.barkKey.trimmingCharacters(in: .whitespacesAndNewlines)
         userAgent = settings.userAgent
+        let address = settings.emailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let recipient = settings.emailRecipient.trimmingCharacters(in: .whitespacesAndNewlines)
+        email = EmailConfiguration(enabled: settings.emailEnabled, address: address,
+                                   recipient: recipient.isEmpty ? address : recipient,
+                                   host: settings.emailHost.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   port: settings.emailPort, password: settings.emailPassword)
     }
 
     static func stored() -> AppSettingsSnapshot {
@@ -61,12 +68,13 @@ struct AppSettingsSnapshot: Sendable {
             checkInTime: defaults.string(forKey: "checkin_time") ?? "09:17",
             barkServer: defaults.string(forKey: "bark_server") ?? "https://api.day.app",
             barkKey: KeychainStore.read("bark_key"),
-            userAgent: defaults.string(forKey: "user_agent") ?? AppSettings.defaultUserAgent
+            userAgent: defaults.string(forKey: "user_agent") ?? AppSettings.defaultUserAgent,
+            email: storedEmail(defaults)
         )
     }
 
-    private init(siteURL: String, cookie: String, automaticEnabled: Bool, checkInTime: String,
-                 barkServer: String, barkKey: String, userAgent: String) {
+    init(siteURL: String, cookie: String, automaticEnabled: Bool, checkInTime: String,
+                 barkServer: String, barkKey: String, userAgent: String, email: EmailConfiguration) {
         self.siteURL = siteURL
         self.cookie = cookie
         self.automaticEnabled = automaticEnabled
@@ -74,5 +82,16 @@ struct AppSettingsSnapshot: Sendable {
         self.barkServer = barkServer
         self.barkKey = barkKey
         self.userAgent = userAgent
+        self.email = email
+    }
+
+    private static func storedEmail(_ defaults: UserDefaults) -> EmailConfiguration {
+        let address = defaults.string(forKey: "email_address") ?? ""
+        let recipient = defaults.string(forKey: "email_recipient") ?? ""
+        return EmailConfiguration(enabled: defaults.bool(forKey: "email_enabled"), address: address,
+                                  recipient: recipient.isEmpty ? address : recipient,
+                                  host: defaults.string(forKey: "email_host") ?? "",
+                                  port: defaults.object(forKey: "email_port") as? Int ?? 465,
+                                  password: KeychainStore.read("email_password"))
     }
 }
