@@ -1,0 +1,27 @@
+name: Dounai iOS simulator experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: smoke tests offline; checkin submits one real account check-in
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - checkin
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    uses: xiaobinqt/dounai-checkin/.github/workflows/ios-simulator-probe.yml@script-checkin
+    with:
+      mode: ${{ inputs.mode }}
+    secrets:
+      DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
+      DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
+      DOUNAI_USER_AGENT: ${{ secrets.DOUNAI_USER_AGENT }}
+      COOKIE_UPDATE_TOKEN: ${{ secrets.COOKIE_UPDATE_TOKEN }}

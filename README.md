@@ -4,6 +4,10 @@
 
 > 此分支用于保留旧版 Go、Docker 和 GitHub Actions 脚本。站点目前的人机交互校验已经变化，脚本签到及 GitHub-hosted runner 不能保证可用，不再作为默认方案。当前可用的手机 APK、安装说明和源码位于 [`main`](https://github.com/xiaobinqt/dounai-checkin/tree/main) 分支。
 
+## 新实验：iOS 模拟器签到
+
+本分支新增 [GitHub Actions iOS 模拟器实验](experiments/ios-simulator/README.md)：在 macOS runner 上安装并启动 iOS 实验应用，复用手机端签到与验证码代码。默认只执行不联网的验证；真实账号测试需从私有 runner 仓库手动触发，不新增每日签到计划。**模拟器测试通过不等于云端真实签到成功，网站风控是否放行仍需实测。**
+
 **升级现有部署前，请先查看 [更新日志与升级说明](CHANGELOG.md)，其中会注明是否需要同步私有 runner 的 YAML 或更新 Secrets。**
 
 ## 功能

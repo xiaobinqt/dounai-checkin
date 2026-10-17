@@ -1,0 +1,115 @@
+name: iOS simulator experiment
+
+on:
+  push:
+    branches: [script-checkin]
+    paths:
+      - 'experiments/ios-simulator/**'
+      - '.github/workflows/ios-simulator-probe.yml'
+  workflow_call:
+    inputs:
+      mode:
+        description: smoke (offline fixtures) or checkin (one real account run)
+        type: string
+        default: smoke
+    secrets:
+      DOUNAI_URL:
+        required: false
+      DOUNAI_COOKIE:
+        required: false
+      DOUNAI_USER_AGENT:
+        required: false
+      COOKIE_UPDATE_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dounai-session
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Validate operation and secrets
+        env:
+          PROBE_MODE: ${{ inputs.mode || 'smoke' }}
+          DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
+          DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [[ "$PROBE_MODE" != smoke && "$PROBE_MODE" != checkin ]]; then
+            echo '::error::Mode must be smoke or checkin.'
+            exit 1
+          fi
+          if [[ "$PROBE_MODE" == checkin && ( -z "$DOUNAI_URL" || -z "$DOUNAI_COOKIE" ) ]]; then
+            echo '::error::Configure DOUNAI_URL and DOUNAI_COOKIE in the private caller repository.'
+            exit 1
+          fi
+          if [[ "$PROBE_MODE" == checkin && "$IS_PRIVATE" != true ]]; then
+            echo '::error::Real account experiments must run from a private caller repository.'
+            exit 1
+          fi
+      - name: Checkout experiment
+        uses: actions/checkout@v5
+        with:
+          repository: xiaobinqt/dounai-checkin
+          ref: script-checkin
+          path: experiment
+          persist-credentials: false
+      - name: Checkout pinned iOS core
+        uses: actions/checkout@v5
+        with:
+          repository: xiaobinqt/dounai-checkin
+          ref: 06b1e92b0ac6ce00a674c577ab05c00ebc41d378
+          path: ios-source
+          persist-credentials: false
+      - name: Install and run iOS Simulator application
+        id: probe
+        env:
+          DOUNAI_PROBE_MODE: ${{ inputs.mode || 'smoke' }}
+          DOUNAI_CONFIRM_CHECKIN: 'yes'
+          DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
+          DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
+          DOUNAI_USER_AGENT: ${{ secrets.DOUNAI_USER_AGENT }}
+        run: |
+          bash experiment/experiments/ios-simulator/run.sh \
+            "$GITHUB_WORKSPACE/ios-source" "$RUNNER_TEMP/dounai-probe-result"
+      - name: Persist changed cookie privately
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.COOKIE_UPDATE_TOKEN }}
+        run: |
+          cookie_file="$RUNNER_TEMP/dounai-probe-result/cookie"
+          if [[ ! -s "$cookie_file" ]]; then
+            exit 0
+          fi
+          # shellcheck disable=SC2016
+          trap 'rm -f "$cookie_file"' EXIT
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo '::warning::Cookie changed but COOKIE_UPDATE_TOKEN is missing; refreshed credentials will be discarded.'
+            exit 0
+          fi
+          gh secret set DOUNAI_COOKIE --repo "$GITHUB_REPOSITORY" < "$cookie_file"
+          echo '::notice::Refreshed cookie saved to the caller repository secret.'
+      - name: Report safe result
+        if: always()
+        env:
+          PROBE_OUTCOME: ${{ steps.probe.outcome }}
+          PROBE_MODE: ${{ inputs.mode || 'smoke' }}
+        run: |
+          {
+            # shellcheck disable=SC2016
+            printf '### iOS simulator experiment\n\nMode: `%s`\n\nStep: `%s`\n' "$PROBE_MODE" "$PROBE_OUTCOME"
+            if [[ -f "$RUNNER_TEMP/dounai-probe-result/result.json" ]]; then
+              printf '\n```json\n'
+              jq . "$RUNNER_TEMP/dounai-probe-result/result.json"
+              printf '```\n'
+            fi
+            if [[ "$PROBE_MODE" == smoke ]]; then
+              printf '\nOffline fixtures only. This is NOT proof of a successful real website check-in.\n'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
