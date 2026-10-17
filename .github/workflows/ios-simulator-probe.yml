@@ -67,7 +67,11 @@ jobs:
           ref: 06b1e92b0ac6ce00a674c577ab05c00ebc41d378
           path: ios-source
           persist-credentials: false
-      - name: Install and run iOS Simulator application
+      - name: Compile iOS Simulator application
+        run: |
+          bash experiment/experiments/ios-simulator/build.sh \
+            "$GITHUB_WORKSPACE/ios-source" "$RUNNER_TEMP/dounai-probe-build"
+      - name: Boot simulator, install and run application
         id: probe
         env:
           DOUNAI_PROBE_MODE: ${{ inputs.mode || 'smoke' }}
@@ -75,6 +79,7 @@ jobs:
           DOUNAI_URL: ${{ secrets.DOUNAI_URL }}
           DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
           DOUNAI_USER_AGENT: ${{ secrets.DOUNAI_USER_AGENT }}
+          DOUNAI_PROBE_APP: ${{ runner.temp }}/dounai-probe-build/SimulatorProbe.app
         run: |
           bash experiment/experiments/ios-simulator/run.sh \
             "$GITHUB_WORKSPACE/ios-source" "$RUNNER_TEMP/dounai-probe-result"

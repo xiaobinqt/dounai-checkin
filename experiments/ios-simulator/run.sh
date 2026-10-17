@@ -39,20 +39,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-app_dir="$work_dir/SimulatorProbe.app"
-mkdir "$app_dir"
-cp "$experiment_dir/Info.plist" "$app_dir/Info.plist"
-sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-sources=()
-for file in CheckInPolicy DiagnosticLog CaptchaSolver CheckInClient AppSettings KeychainStore BarkClient EmailClient; do
-  sources+=("$ios_source/ios/DounaiCheckin/$file.swift")
-done
-printf 'Compiling pinned iOS core: %s\n' "$source_revision"
-SDKROOT="$sdk" xcrun swiftc -swift-version 5 -parse-as-library -sdk "$sdk" \
-  -target "$(uname -m)-apple-ios18.0-simulator" \
-  "${sources[@]}" "$experiment_dir/ProbeApp.swift" "$experiment_dir/ProbeFixtures.swift" \
-  -o "$app_dir/SimulatorProbe"
-codesign --force --sign - "$app_dir" >/dev/null 2>&1
+app_dir="${DOUNAI_PROBE_APP:-}"
+if [[ -z "$app_dir" ]]; then
+  bash "$experiment_dir/build.sh" "$ios_source" "$work_dir/build"
+  app_dir="$work_dir/build/SimulatorProbe.app"
+fi
+test -f "$app_dir/SimulatorProbe"
 
 # Create a private simulator rather than erasing or shutting down the user's devices.
 device="$(xcrun simctl list devices available --json | jq -r '
@@ -66,8 +58,15 @@ fi
 IFS=$'\t' read -r runtime device_type <<< "$device"
 simulator_id="$(xcrun simctl create "Dounai probe $(date +%s)-$$" "$device_type" "$runtime")"
 printf 'Booting simulator: %s\n' "$runtime"
-xcrun simctl boot "$simulator_id"
-xcrun simctl bootstatus "$simulator_id" -b
+if ! perl -e 'alarm 30; exec @ARGV or die "Unable to start command\n"' xcrun simctl boot "$simulator_id"; then
+  echo '::error::Simulator boot command failed or timed out (30 seconds).'
+  exit 1
+fi
+if ! perl -e 'alarm 600; exec @ARGV or die "Unable to start command\n"' xcrun simctl bootstatus "$simulator_id" -b; then
+  echo '::error::Simulator did not finish booting within 600 seconds.'
+  exit 1
+fi
+echo '::notice::Simulator boot completed; installing experiment application.'
 xcrun simctl install "$simulator_id" "$app_dir"
 container="$(xcrun simctl get_app_container "$simulator_id" "$bundle_id" data)"
 
@@ -78,7 +77,8 @@ SIMCTL_CHILD_DOUNAI_CONFIRM_CHECKIN="${DOUNAI_CONFIRM_CHECKIN:-}" \
 SIMCTL_CHILD_DOUNAI_URL="${DOUNAI_URL:-}" \
 SIMCTL_CHILD_DOUNAI_COOKIE="${DOUNAI_COOKIE:-}" \
 SIMCTL_CHILD_DOUNAI_USER_AGENT="${DOUNAI_USER_AGENT:-}" \
-  xcrun simctl launch "$simulator_id" "$bundle_id" >/dev/null 2>&1
+  perl -e 'alarm 120; exec @ARGV or die "Unable to start command\n"' \
+    xcrun simctl launch "$simulator_id" "$bundle_id" >/dev/null 2>&1
 
 printf 'Application launched; waiting for %s result.\n' "$mode"
 for ((attempt=0; attempt<120; attempt++)); do
