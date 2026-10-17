@@ -22,6 +22,6 @@ done
 printf 'Compiling pinned iOS core: %s\n' "$source_revision"
 SDKROOT="$sdk" xcrun swiftc -swift-version 5 -parse-as-library -sdk "$sdk" \
   -target "$(uname -m)-apple-ios18.0-simulator" \
-  "${sources[@]}" "$experiment_dir/ProbeApp.swift" "$experiment_dir/ProbeFixtures.swift" \
+  "${sources[@]}" "$experiment_dir/ProbeApp.swift" "$experiment_dir/ProbeFixtures.swift" "$experiment_dir/CaptchaInspection.swift" \
   -o "$app_dir/SimulatorProbe"
 codesign --force --sign - "$app_dir" >/dev/null 2>&1

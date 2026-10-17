@@ -4,14 +4,17 @@
 
 实验应用直接编译 `main` 的 iOS 签到、验证码和日志代码，固定版本为 `06b1e92b0ac6ce00a674c577ab05c00ebc41d378`，不会修改或重新安装你的手机应用。实验入口不包含网页登录 UI，真实运行需要提前准备登录 Cookie。
 
-## 两种模式
+## 三种模式
 
 | 模式 | 行为 | 能说明什么 |
 | --- | --- | --- |
 | `smoke`（默认） | 启动模拟器、安装应用；真实 Vision PNG 识别、SVG 算式、模拟 HTTP 签到、验证码补试、POST 中断不重试、Cookie 更新 | 证明 iOS 程序和 OCR 能在 runner 的模拟器中实际运行，不是只编译成功 |
+| `inspect` | 只 GET 签到页面和验证码接口，记录 HTTP 状态、JSON 类型/字段存在性、固定消息分类 | 诊断验证码为何未被接受，不识别验证码、不调用签到 POST；`inspected` 不代表签到成功 |
 | `checkin` | 携带指定 Cookie 请求真实站点，运行一次现有 iOS 签到流程 | 只有此模式返回 `passed` 才代表云端真实签到或服务器确认今日已签到 |
 
 `smoke` 的 HTTP 全部由进程内 URLProtocol 接管，不访问网站、不消耗真实验证码、不发送通知。`checkin` 保留 iOS 核心的有限验证码安全补试；不会在外层重试整个任务，也不会因 POST 超时自动再提交。实验暂不发送 Bark/邮件，以 Actions 摘要为准。
+
+`inspect` 使用模拟器中的原生 URLSession 和同样的 iOS User-Agent、Cookie/AJAX 请求头；拒绝跳转，不向其他源转发 Cookie。只输出白名单中的固定字段和分类，不输出任意 JSON 键名、消息正文、票据、图片或 Cookie。它会请求一张验证码，但绝不提交答案。离线回归同时检查诊断的脱敏和仅 GET 边界。
 
 ## 云端运行
 
@@ -26,7 +29,7 @@
 - `DOUNAI_USER_AGENT`：可选；与获取 Cookie 时的浏览器保持一致，默认使用 iOS 应用的 User-Agent。
 - `COOKIE_UPDATE_TOKEN`：可选；仅该私有仓库 `Secrets: Read and write` 权限的 PAT。服务器更新 Cookie 时自动保存；不配置会提示新 Cookie 被丢弃，不影响本次已确认的签到。创建方式见根目录 README。
 
-进入 `Actions → Dounai iOS simulator experiment → Run workflow`：先选择 `smoke`，再视需要选择 `checkin`。凭据只放 Secrets，不放 workflow 输入或源码。公开源码分支不是默认分支，所以手动入口放在私有仓库默认分支，不依赖直接在此分支注册 `workflow_dispatch`。
+进入 `Actions → Dounai iOS simulator experiment → Run workflow`：先选择 `smoke`，再视需要选择 `inspect` 或 `checkin`。凭据只放 Secrets，不放 workflow 输入或源码。公开源码分支不是默认分支，所以手动入口放在私有仓库默认分支，不依赖直接在此分支注册 `workflow_dispatch`。
 
 真实测试尽量选当天尚未签到时进行。若服务端只返回“今日已签到”，只能证明本次会话被服务器接受，不能据此推断新的验证码挑战已经通过。若提交后断网或超时，先查看网页状态，不要直接重跑。
 

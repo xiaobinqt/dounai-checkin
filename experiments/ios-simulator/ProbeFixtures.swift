@@ -77,6 +77,31 @@ enum ProbeFixtures {
             try require(ProbeHTTP.methods == ["GET", "GET", "POST"] && ProbeHTTP.replies.isEmpty)
         }
         DiagnosticLog.add("probe post-not-retried passed")
+
+        let sensitive = "do-not-log-this-session-or-challenge"
+        let response = HTTPURLResponse(url: URL(string: "https://example.invalid/auth/captcha")!,
+                                       statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let data = try JSONSerialization.data(withJSONObject: ["ret": 0, "msg": "请先完成人机交互验证 " + sensitive,
+            "svg": "", "challenge": sensitive, "unexpected_secret_key": sensitive])
+        let summary = CaptchaInspection.summarize(data, response: response, stage: "captcha")
+        let encoded = try JSONSerialization.data(withJSONObject: summary)
+        try require(!String(decoding: encoded, as: UTF8.self).contains(sensitive))
+        try require(!String(decoding: encoded, as: UTF8.self).contains("unexpected_secret_key"))
+        try require(summary["messageCategory"] as? String == "interaction-required")
+        try require(summary["retClass"] as? String == "zero")
+        try require(summary["clientCaptchaGuardPasses"] as? Bool == false)
+        DiagnosticLog.add("probe inspection-redaction passed")
+
+        ProbeHTTP.replies = [panel, success]
+        ProbeHTTP.methods = []
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ProbeHTTP.self]
+        let inspection = try await CaptchaInspection.run(settings: Probe.settings(site: "https://example.invalid", cookie: "session=test"),
+                                                         configuration: configuration)
+        try require(ProbeHTTP.methods == ["GET", "GET"] && ProbeHTTP.replies.isEmpty)
+        try require(inspection.cookie == "session=rotated")
+        try require(inspection.metadata.count == 2)
+        DiagnosticLog.add("probe inspection-read-only passed")
     }
 
     private static func readablePNG() throws -> Data {

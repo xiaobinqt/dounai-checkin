@@ -10,11 +10,11 @@ mode="${DOUNAI_PROBE_MODE:-smoke}"
 source_revision="06b1e92b0ac6ce00a674c577ab05c00ebc41d378"
 bundle_id="com.dounai.checkin.simulatorprobe"
 
-if [[ "$mode" != smoke && "$mode" != checkin ]]; then
+if [[ "$mode" != smoke && "$mode" != checkin && "$mode" != inspect ]]; then
   echo 'Unsupported probe mode.' >&2
   exit 2
 fi
-if [[ "$mode" == checkin && ( "${DOUNAI_CONFIRM_CHECKIN:-}" != yes || -z "${DOUNAI_URL:-}" || -z "${DOUNAI_COOKIE:-}" ) ]]; then
+if [[ "$mode" != smoke && ( "${DOUNAI_CONFIRM_CHECKIN:-}" != yes || -z "${DOUNAI_URL:-}" || -z "${DOUNAI_COOKIE:-}" ) ]]; then
   echo 'Real check-in requires confirmation, DOUNAI_URL and DOUNAI_COOKIE.' >&2
   exit 2
 fi
@@ -92,7 +92,7 @@ for ((attempt=0; attempt<120; attempt++)); do
     jq . "$output_dir/result.json"
     # Only fixed events/counts/categories from the shared DiagnosticLog are shown.
     sed -n '1,180p' "$output_dir/diagnostics.log"
-    jq -e '.status == "passed"' "$output_dir/result.json" >/dev/null
+    jq -e '.status == "passed" or .status == "inspected"' "$output_dir/result.json" >/dev/null
     exit $?
   fi
   sleep 1

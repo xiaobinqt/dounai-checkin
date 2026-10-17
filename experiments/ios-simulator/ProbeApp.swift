@@ -48,35 +48,44 @@ enum Probe {
     static func run() async -> Bool {
         let env = ProcessInfo.processInfo.environment
         let mode = env["DOUNAI_PROBE_MODE"] ?? "smoke"
-        var result: [String: Any] = ["mode": mode == "checkin" ? "checkin" : "smoke", "status": "failed"]
+        var result: [String: Any] = ["mode": ["smoke", "inspect", "checkin"].contains(mode) ? mode : "invalid", "status": "failed"]
         var client: CheckInClient?
+        var inspectedCookie: String?
         var originalCookie = ""
         DiagnosticLog.clear()
         do {
-            guard mode == "smoke" || mode == "checkin" else { throw ProbeFailure.configuration }
+            guard ["smoke", "inspect", "checkin"].contains(mode) else { throw ProbeFailure.configuration }
             if mode == "smoke" {
                 try await ProbeFixtures.run()
-                result["checks"] = ["svg", "vision-png", "normal-checkin", "captcha-retry", "post-not-retried"]
+                result["checks"] = ["svg", "vision-png", "normal-checkin", "captcha-retry", "post-not-retried",
+                                    "inspection-redaction", "inspection-read-only"]
             } else {
                 guard env["DOUNAI_CONFIRM_CHECKIN"] == "yes",
                       let site = env["DOUNAI_URL"], !site.isEmpty,
                       let cookie = env["DOUNAI_COOKIE"], !cookie.isEmpty else { throw ProbeFailure.configuration }
                 originalCookie = cookie
-                client = try CheckInClient(settings: settings(site: site, cookie: cookie,
-                    userAgent: env["DOUNAI_USER_AGENT"].flatMap { $0.isEmpty ? nil : $0 } ?? AppSettings.defaultUserAgent))
-                // No outer retry: a timed-out POST must not cause another account submission.
-                _ = try await client!.checkIn()
+                let settings = settings(site: site, cookie: cookie,
+                    userAgent: env["DOUNAI_USER_AGENT"].flatMap { $0.isEmpty ? nil : $0 } ?? AppSettings.defaultUserAgent)
+                if mode == "inspect" {
+                    let inspected = try await CaptchaInspection.run(settings: settings)
+                    inspectedCookie = inspected.cookie
+                    result["inspection"] = inspected.metadata
+                } else {
+                    client = try CheckInClient(settings: settings)
+                    // No outer retry: a timed-out POST must not cause another account submission.
+                    _ = try await client!.checkIn()
+                }
             }
-            result["status"] = "passed"
+            result["status"] = mode == "inspect" ? "inspected" : "passed"
         } catch {
             // Do not log localized errors, server messages, URLs, captcha answers or cookies.
             result["category"] = error is ProbeFailure ? "probe-validation" : DiagnosticLog.category(error)
         }
         // Keep updated credentials separate from the public result, including on failure.
-        if let client, client.cookieHeader != originalCookie {
+        if let refreshed = inspectedCookie ?? client?.cookieHeader, refreshed != originalCookie {
             do {
                 let cookieURL = documents.appendingPathComponent("cookie")
-                try Data(client.cookieHeader.utf8).write(to: cookieURL, options: .atomic)
+                try Data(refreshed.utf8).write(to: cookieURL, options: .atomic)
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cookieURL.path)
                 result["cookieChanged"] = true
             } catch {
@@ -90,7 +99,7 @@ enum Probe {
             // The host treats this atomic file as the completion signal, not simctl's launch status.
             try data.write(to: documents.appendingPathComponent("result.json"), options: .atomic)
         } catch { return false }
-        return result["status"] as? String == "passed"
+        return ["passed", "inspected"].contains(result["status"] as? String ?? "")
     }
 }
 

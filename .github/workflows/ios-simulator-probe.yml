@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       mode:
-        description: smoke (offline fixtures) or checkin (one real account run)
+        description: smoke (offline), inspect (GET only), or checkin (one account run)
         type: string
         default: smoke
     secrets:
@@ -41,15 +41,15 @@ jobs:
           DOUNAI_COOKIE: ${{ secrets.DOUNAI_COOKIE }}
           IS_PRIVATE: ${{ github.event.repository.private }}
         run: |
-          if [[ "$PROBE_MODE" != smoke && "$PROBE_MODE" != checkin ]]; then
-            echo '::error::Mode must be smoke or checkin.'
+          if [[ "$PROBE_MODE" != smoke && "$PROBE_MODE" != inspect && "$PROBE_MODE" != checkin ]]; then
+            echo '::error::Mode must be smoke, inspect or checkin.'
             exit 1
           fi
-          if [[ "$PROBE_MODE" == checkin && ( -z "$DOUNAI_URL" || -z "$DOUNAI_COOKIE" ) ]]; then
+          if [[ "$PROBE_MODE" != smoke && ( -z "$DOUNAI_URL" || -z "$DOUNAI_COOKIE" ) ]]; then
             echo '::error::Configure DOUNAI_URL and DOUNAI_COOKIE in the private caller repository.'
             exit 1
           fi
-          if [[ "$PROBE_MODE" == checkin && "$IS_PRIVATE" != true ]]; then
+          if [[ "$PROBE_MODE" != smoke && "$IS_PRIVATE" != true ]]; then
             echo '::error::Real account experiments must run from a private caller repository.'
             exit 1
           fi
@@ -116,5 +116,7 @@ jobs:
             fi
             if [[ "$PROBE_MODE" == smoke ]]; then
               printf '\nOffline fixtures only. This is NOT proof of a successful real website check-in.\n'
+            elif [[ "$PROBE_MODE" == inspect ]]; then
+              printf '\nRead-only GET inspection only. No check-in POST was sent. An inspected result is NOT a successful check-in.\n'
             fi
           } >> "$GITHUB_STEP_SUMMARY"

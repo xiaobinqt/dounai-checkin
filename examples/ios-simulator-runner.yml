@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: smoke tests offline; checkin submits one real account check-in
+        description: smoke tests offline; inspect uses GET only; checkin submits a real check-in
         required: true
         default: smoke
         type: choice
         options:
           - smoke
+          - inspect
           - checkin
 
 permissions:
