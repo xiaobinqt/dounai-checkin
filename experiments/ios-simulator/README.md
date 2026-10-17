@@ -14,7 +14,7 @@
 
 `smoke` 的 HTTP 全部由进程内 URLProtocol 接管，不访问网站、不消耗真实验证码、不发送通知。`checkin` 保留 iOS 核心的有限验证码安全补试；不会在外层重试整个任务，也不会因 POST 超时自动再提交。实验暂不发送 Bark/邮件，以 Actions 摘要为准。
 
-`inspect` 使用模拟器中的原生 URLSession 和同样的 iOS User-Agent、Cookie/AJAX 请求头；拒绝跳转，不向其他源转发 Cookie。只输出白名单中的固定字段和分类，不输出任意 JSON 键名、消息正文、票据、图片或 Cookie。它会请求一张验证码，但绝不提交答案。离线回归同时检查诊断的脱敏和仅 GET 边界。
+`inspect` 使用模拟器中的原生 URLSession 和同样的 iOS User-Agent、Cookie/AJAX 请求头；拒绝跳转，不向其他源转发 Cookie。输出白名单中的字段及分类，并仅在私有运行中记录脱敏后的 `msg`（`messageRedacted`）：先去除请求与响应 Cookie 值，再遮盖邮箱、IP、URL、凭据字段和长令牌，合并成单行并限制为 320 字。不输出任意 JSON 键名、票据、图片或完整响应正文。它会请求一张验证码，但绝不提交答案。离线回归同时检查诊断的脱敏和仅 GET 边界。
 
 ## 云端运行
 
@@ -42,7 +42,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   bash experiments/ios-simulator/run.sh /path/to/main-checkout /tmp/new-probe-output
 ```
 
-输出目录必须不存在，防止把旧结果误认为新结果。脚本创建专用模拟器，结束后只关闭并删除这个临时设备，不触碰已有模拟器或 iPhone。模拟器启动等待有 10 分钟上限，应用结果等待有 120 秒上限；云端将编译和启动分成独立步骤，不主动取消正在执行的任务。生成的无凭据编译目录会保留，便于检查；凭据和完整容器不会上传为 artifact。`result.json` 和日志仅包含固定事件、分类、HTTP 状态及数量，不输出网站正文、Cookie、验证码或服务端消息。Cookie 单独存为权限 `0600` 的 `cookie` 文件；本地真实测试后请妥善保管或删除它。
+输出目录必须不存在，防止把旧结果误认为新结果。脚本创建专用模拟器，结束后只关闭并删除这个临时设备，不触碰已有模拟器或 iPhone。模拟器启动等待有 10 分钟上限，应用结果等待有 120 秒上限；云端将编译和启动分成独立步骤，不主动取消正在执行的任务。生成的无凭据编译目录会保留，便于检查；凭据和完整容器不会上传为 artifact。`result.json` 和日志输出固定事件、分类、HTTP 状态、数量，以及私有诊断中的脱敏 `msg`，不输出完整网站正文、Cookie、验证码或未经脱敏的服务端消息。Cookie 单独存为权限 `0600` 的 `cookie` 文件；本地真实测试后请妥善保管或删除它。
 
 ## 验证记录
 

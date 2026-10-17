@@ -90,6 +90,18 @@ enum ProbeFixtures {
         try require(summary["messageCategory"] as? String == "interaction-required")
         try require(summary["retClass"] as? String == "zero")
         try require(summary["clientCaptchaGuardPasses"] as? Bool == false)
+        let reason = "通过云服务器或托管流水线发起自动化签到请求"
+        try require(CaptchaInspection.redactMessage(reason, sensitiveValues: []) == reason)
+        let redacted = CaptchaInspection.redactMessage(
+            "请稍后再试\nuid=1234 user@example.com 192.0.2.5 https://example.invalid/private token=abcd " + sensitive,
+            sensitiveValues: [sensitive, "example-cookie-value"])
+        for secret in [sensitive, "1234", "user@example.com", "192.0.2.5", "https://example.invalid/private", "abcd", "\n"] {
+            try require(!redacted.contains(secret))
+        }
+        let shortCookie = CaptchaInspection.redactMessage("拒绝 k9", sensitiveValues: ["k9"])
+        try require(!shortCookie.contains("k9"))
+        try require(CaptchaInspection.redactMessage(String(repeating: "测", count: 400), sensitiveValues: []).count == 321)
+        try require(!CaptchaInspection.redactMessage("\u{0060}\u{0060}\u{0060}::error::\n消息", sensitiveValues: []).contains("::error::"))
         DiagnosticLog.add("probe inspection-redaction passed")
 
         ProbeHTTP.replies = [panel, success]

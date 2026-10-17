@@ -1,7 +1,8 @@
 import Foundation
 
 // Read-only native URLSession probe. It never creates a check-in POST, runs OCR,
-// persists response bodies, or exports arbitrary server text/JSON keys.
+// persists response bodies, or exports arbitrary JSON keys. Only msg may be
+// exported as bounded, single-line, credential-redacted text in private runs.
 enum CaptchaInspection {
     struct Outcome {
         let metadata: [[String: Any]]
@@ -48,7 +49,6 @@ enum CaptchaInspection {
             guard let response = raw as? HTTPURLResponse, data.count <= 2 * 1024 * 1024 else {
                 throw CheckInError.message("Invalid inspection response")
             }
-            metadata.append(summarize(data, response: response, stage: stage))
             let headers = response.allHeaderFields.reduce(into: [String: String]()) { result, item in
                 if let key = item.key as? String, let value = item.value as? String { result[key] = value }
             }
@@ -61,6 +61,12 @@ enum CaptchaInspection {
                     values.removeValue(forKey: cookie.name)
                 } else { values[cookie.name] = cookie.value }
             }
+            let oldValues = cookies.split(separator: ";").compactMap { part -> String? in
+                let pair = part.split(separator: "=", maxSplits: 1).map(String.init)
+                return pair.count == 2 ? pair[1].trimmingCharacters(in: .whitespaces) : nil
+            }
+            metadata.append(summarize(data, response: response, stage: stage,
+                sensitiveValues: oldValues + Array(values.values) + [settings.siteURL]))
             cookies = values.keys.sorted().map { "\($0)=\(values[$0]!)" }.joined(separator: "; ")
             DiagnosticLog.add("inspection stage=\(stage) status=\(response.statusCode)")
             if !(200..<300).contains(response.statusCode) { break }
@@ -68,10 +74,12 @@ enum CaptchaInspection {
         return Outcome(metadata: metadata, cookie: cookies)
     }
 
-    static func summarize(_ data: Data, response: HTTPURLResponse, stage: String) -> [String: Any] {
+    static func summarize(_ data: Data, response: HTTPURLResponse, stage: String,
+                          sensitiveValues: [String] = []) -> [String: Any] {
         let text = String(decoding: data, as: UTF8.self).lowercased()
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        let message = (json?["msg"] as? String ?? "").lowercased()
+        let originalMessage = json?["msg"] as? String ?? ""
+        let message = originalMessage.lowercased()
         let svg = json?["svg"] as? String ?? ""
         let ret = json?["ret"]
         let retType: String
@@ -103,9 +111,41 @@ enum CaptchaInspection {
             "saltMaskPresent": json?["salt_mask"] != nil,
             "seedPresent": json?["seed"] != nil,
             "messageCategory": category,
+            "messageRedacted": redactMessage(originalMessage, sensitiveValues: sensitiveValues),
             "loginPageMarker": text.contains("/auth/login") && text.contains("captcha_code"),
             "cloudChallengeMarker": text.contains("cf-chl-") || text.contains("challenge-platform"),
             "clientCaptchaGuardPasses": (ret as? Int) == 1 && !svg.isEmpty
         ]
+    }
+
+    static func redactMessage(_ raw: String, sensitiveValues: [String]) -> String {
+        var text = raw
+        // Explicitly mask both request and newly rotated response Cookie values.
+        for value in Set(sensitiveValues).filter({ !$0.isEmpty }).sorted(by: { $0.count > $1.count }) {
+            text = text.replacingOccurrences(of: value, with: "[REDACTED]")
+        }
+        let patterns = [
+            #"(?i)\b(?:https?|wss?)://[^\s<>"']+"#,
+            #"(?i)[A-Z0-9.!#$%&'*+/=?^_{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#,
+            #"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b"#,
+            #"(?i)(?<![a-z0-9])(?:[0-9a-f]{0,4}:){2,}[0-9a-f:.]*(?:%[a-z0-9]+)?"#,
+            #"(?i)(?:cookie|phpsessid|session(?:id|_id)?|token|key|uid|email|ip|challenge|salt_mask|seed|验证码|票据)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)"#,
+            #"\b[A-Za-z0-9_+/=-]{20,}\b"#
+        ]
+        for pattern in patterns {
+            text = text.replacingOccurrences(of: pattern, with: "[REDACTED]", options: .regularExpression)
+        }
+        text = text.replacingOccurrences(of: #"<[^>]*>"#, with: " ", options: .regularExpression)
+        text = String(text.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.controlCharacters.contains(scalar) || (0x202A...0x202E).contains(scalar.value)
+                || (0x2066...0x2069).contains(scalar.value) { return " " }
+            return Character(String(scalar))
+        })
+        // Keep server text from introducing Markdown fences or Actions commands.
+        text = text.replacingOccurrences(of: "\u{0060}", with: "'")
+            .replacingOccurrences(of: "::", with: ": :")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.count > 320 ? String(text.prefix(320)) + "…" : text
     }
 }
